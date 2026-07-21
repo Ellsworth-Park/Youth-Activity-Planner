@@ -27,14 +27,12 @@
     --shadow: 0 1px 2px rgba(38,52,74,0.06), 0 4px 16px rgba(38,52,74,0.06);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;overscroll-behavior:none;}
   body{
     background:var(--bg);
     color:var(--ink);
     font-family:'Work Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing:antialiased;
-    min-height:100vh;
-    min-height:100dvh;
   }
   h1,h2,h3,.serif{
     font-family:'Fraunces', Georgia, serif;
@@ -44,12 +42,13 @@
   .app{
     max-width:480px;
     margin:0 auto;
-    min-height:100vh;
-    min-height:100dvh;
+    height:100vh;
+    height:100dvh;
     display:flex;
     flex-direction:column;
     background:var(--bg);
     position:relative;
+    overflow:hidden;
   }
   /* ---------- Header ---------- */
   header.topbar{
@@ -57,6 +56,7 @@
     align-items:center;
     justify-content:space-between;
     padding:18px 20px 14px;
+    flex-shrink:0;
   }
   header.topbar .brand{
     display:flex;
@@ -91,8 +91,10 @@
   /* ---------- Tab content ---------- */
   main{
     flex:1;
-    padding:0 16px 100px;
+    min-height:0;
+    padding:0 16px 24px;
     overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   }
   .hidden{display:none !important;}
 
@@ -202,10 +204,7 @@
 
   /* ---------- Bottom tabs ---------- */
   nav.tabbar{
-    position:fixed;
-    left:0;right:0;bottom:0;
-    max-width:480px;
-    margin:0 auto;
+    flex-shrink:0;
     background:var(--surface);
     border-top:1px solid var(--line);
     display:flex;
@@ -482,6 +481,10 @@
         <button class="planning-add" onclick="ActivityForm.openNew()">+ New activity</button>
         <div id="planningList"></div>
       </div>
+      <!-- Ideas tab -->
+      <div id="ideasTab" class="hidden">
+        <div id="ideasList"></div>
+      </div>
     </main>
 
     <nav class="tabbar">
@@ -492,6 +495,10 @@
       <button id="tabPlanningBtn" onclick="Tabs.show('planning')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         Planning
+      </button>
+      <button id="tabIdeasBtn" onclick="Tabs.show('ideas')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3Z"/></svg>
+        Ideas
       </button>
     </nav>
   </div>
@@ -516,6 +523,102 @@ const CATEGORIES = {
   physical:     { label:'Physical',     color:'var(--physical)',     glyph:'⛰' },
   social:       { label:'Social',       color:'var(--social)',       glyph:'♥' }
 };
+
+// High-level activity ideas, adapted from the Church's Youth Activities guide
+// (churchofjesuschrist.org/study/manual/youth-activities). Titles and short
+// blurbs only — leaders can look up the full write-up on the guide if they want details.
+const IDEAS = [
+  { title:'Book of Mormon Challenge', category:'spiritual', blurb:'Read the Book of Mormon together as a group challenge.' },
+  { title:'Faith Walk', category:'spiritual', blurb:'A blindfolded trust walk that teaches faith and following the Spirit.' },
+  { title:'General Conference Recap', category:'spiritual', blurb:'Trivia and discussion revisiting the most recent conference talks.' },
+  { title:'Scripture Games', category:'spiritual', blurb:'Active games built around scripture stories and mastery verses.' },
+  { title:'My Favorite Scripture', category:'spiritual', blurb:'Youth share a meaningful scripture and why it matters to them.' },
+  { title:'Bible Customs', category:'spiritual', blurb:'Recreate ancient customs and objects to bring scripture stories to life.' },
+  { title:'Read the Four Gospels', category:'spiritual', blurb:'A group reading plan through the Gospels, e.g. finishing before Easter.' },
+  { title:'Attributes of Christ', category:'spiritual', blurb:'Choose a Christlike trait to work on and track progress together.' },
+  { title:'Accept the Temple Challenge', category:'spiritual', blurb:'Find ancestors\u2019 names and make a plan to take them to the temple.' },
+  { title:'Indexing Night', category:'spiritual', blurb:'Help make historical records searchable through FamilySearch indexing.' },
+  { title:'Sharing What We Learn', category:'spiritual', blurb:'Visit ward members in pairs to share a short spiritual message.' },
+  { title:'Place a Book of Mormon', category:'spiritual', blurb:'Mark testimonies inside a Book of Mormon to give away to someone.' },
+
+  { title:'Career Possibilities', category:'intellectual', blurb:'Explore career interests and hear from people in different fields.' },
+  { title:'Visiting a College or Vocational School', category:'intellectual', blurb:'Tour a campus to learn about higher-ed options and requirements.' },
+  { title:'Study Skill Stations', category:'intellectual', blurb:'Rotate through stations practicing note-taking, memorization, and test prep.' },
+  { title:'How to Succeed in School', category:'intellectual', blurb:'Pair older and younger youth for peer tutoring and study tips.' },
+  { title:'Money Matters', category:'intellectual', blurb:'Learn budgeting, saving, and living within your means.' },
+  { title:'Job Searching', category:'intellectual', blurb:'Practice resumes and mock interviews with a local expert.' },
+  { title:'Library Science', category:'intellectual', blurb:'Tour a library and learn research and internet-search skills.' },
+  { title:'Learn about an Ancestor', category:'intellectual', blurb:'Dig into a historical record to learn an ancestor\u2019s story.' },
+  { title:'Keep a Journal Your Way', category:'intellectual', blurb:'Try different journaling styles and set a week-long goal.' },
+  { title:'Improve My Teaching Skills', category:'intellectual', blurb:'Practice teaching techniques like asking good questions.' },
+
+  { title:'Game Night', category:'physical', blurb:'Active team games like relay races and tug-of-war.' },
+  { title:'Sports Tournament', category:'physical', blurb:'A friendly multi-sport tournament in small teams.' },
+  { title:'Outdoor Camping', category:'physical', blurb:'An overnight campout with youth helping plan meals and activities.' },
+  { title:'Nature Walk', category:'physical', blurb:'A hike to enjoy and reflect on the outdoors together.' },
+  { title:'Fun 5K', category:'physical', blurb:'A group run or walk with tips from an experienced runner.' },
+  { title:'Outdoor Survival Skills', category:'physical', blurb:'Learn fire-building, shelter, and other outdoor basics.' },
+  { title:'Exercise Night', category:'physical', blurb:'Try different workouts and set a fitness goal to track.' },
+  { title:'First Aid', category:'physical', blurb:'Learn basic first-aid skills like CPR and treating wounds.' },
+  { title:'Emergency Preparedness', category:'physical', blurb:'Build a small emergency kit and learn readiness basics.' },
+  { title:'Backpacking Prep Series', category:'physical', blurb:'A multi-week series building up to a backpacking trip.' },
+
+  { title:'Getting to Know Each Other', category:'social', blurb:'A guessing game using personal items to spark conversation.' },
+  { title:'Unbirthday Party', category:'social', blurb:'Celebrate everyone at once with a surprise gift swap.' },
+  { title:'Service Auction', category:'social', blurb:'Youth "sell" small acts of service to each other for fun.' },
+  { title:'Circle of Trust', category:'social', blurb:'A trust-building exercise about relying on each other.' },
+  { title:'Get to Know Your Bishop', category:'social', blurb:'An informal evening learning about the bishop as a person.' },
+  { title:'The Art of Conversation', category:'social', blurb:'Rotating conversation partners on fun discussion topics.' },
+  { title:'Web of Gratitude', category:'social', blurb:'Pass a ball of yarn while sharing appreciation for each other.' },
+  { title:'No Bullying', category:'social', blurb:'A guest-speaker discussion on recognizing and responding to bullying.' },
+  { title:'Group Date Ideas', category:'social', blurb:'Brainstorm and carry out a creative group date night.' },
+  { title:'Random Acts of Kindness Challenge', category:'social', blurb:'Teams compete to perform kind acts in a set time.' },
+  { title:'Food Drive', category:'social', blurb:'Collect nonperishable food for a local food bank.' },
+  { title:'Visit and Serve the Elderly', category:'social', blurb:'Bring treats or a small program to elderly ward members.' },
+
+  { title:'Bring the Book of Mormon to Life', category:'spiritual', blurb:'Read the Book of Mormon with someone who could use help understanding it.' },
+  { title:'Teach a Book of Mormon Story', category:'spiritual', blurb:'Bring a scripture story to life through a skit, game, or art project.' },
+  { title:'Missionary Movie Night', category:'spiritual', blurb:'Watch and discuss a missionary-themed video together.' },
+  { title:'Share a Christ-Centered Message', category:'spiritual', blurb:'Watch an uplifting video, then share it with someone this week.' },
+  { title:'Family Home Evening Practice', category:'spiritual', blurb:'Practice leading family home evening and build a take-home kit.' },
+  { title:'Find Your Ancestors', category:'spiritual', blurb:'Research family history and prepare names for temple ordinances.' },
+  { title:'General Conference Quote Jars', category:'spiritual', blurb:'Collect favorite conference quotes to revisit throughout the year.' },
+  { title:'Standing Up for the Lord\u2019s Standards', category:'spiritual', blurb:'Practice responding to situations that challenge your standards.' },
+  { title:'Advertising Our Standards', category:'spiritual', blurb:'Create posters or videos about living the standards you believe in.' },
+
+  { title:'Study as Missionaries Do', category:'intellectual', blurb:'Practice focused, prayerful scripture study using missionary study habits.' },
+  { title:'Teaching People from Other Cultures', category:'intellectual', blurb:'Hear from returned missionaries about teaching people from other cultures.' },
+  { title:'How to Pay for Schooling', category:'intellectual', blurb:'Learn about scholarships, financial aid, and paying for college.' },
+  { title:'Scripture Study Skills', category:'intellectual', blurb:'Learn techniques like marking scriptures, journaling, and topical study.' },
+  { title:'Set Up and Explore Your Church Account', category:'intellectual', blurb:'Learn to use FamilySearch, Gospel Library, and other Church tools.' },
+  { title:'See-Tell-Create', category:'intellectual', blurb:'A communication challenge: describe an object well enough for others to recreate it.' },
+  { title:'Internet Safety', category:'intellectual', blurb:'Learn to recognize online risks and use the internet safely and wisely.' },
+
+  { title:'Teaching Each Other a Sport', category:'physical', blurb:'Learn a new sport or skill from another youth in the group.' },
+  { title:'Noncompetitive Physical Activities', category:'physical', blurb:'Casual, no-pressure physical fun like swimming or biking.' },
+  { title:'Preserving the Outdoors', category:'physical', blurb:'Clean up litter, plant trees, or help care for a trail or park.' },
+  { title:'Outdoor Cooking', category:'physical', blurb:'Learn Dutch oven or campfire cooking and share the results.' },
+  { title:'Fishing', category:'physical', blurb:'Learn basic fishing skills and plan a fishing trip.' },
+  { title:'Home Maintenance', category:'physical', blurb:'Learn practical skills like basic repairs, tools, and upkeep.' },
+  { title:'Learning to Cook', category:'physical', blurb:'Learn meal planning, grocery shopping, and basic cooking.' },
+  { title:'Healthy Food Hunt', category:'physical', blurb:'Practice shopping for and choosing nutritious foods.' },
+  { title:'Hike to the Devotional', category:'physical', blurb:'A short hike ending in a brief devotional message.' },
+  { title:'Follower and Guide', category:'physical', blurb:'A blindfolded trust-building obstacle course in pairs.' },
+
+  { title:'Beautifying Our Homes', category:'social', blurb:'Learn basic home-improvement skills and use them at home.' },
+  { title:'Christmas Giving', category:'social', blurb:'Provide gifts and food for a family in need at Christmastime.' },
+  { title:'Improving Our Community', category:'social', blurb:'Identify and help meet a need in your local community.' },
+  { title:'Secret Notes of Encouragement', category:'social', blurb:'Leave anonymous notes of love and encouragement for a ward member.' },
+  { title:'Service Scavenger Hunt', category:'social', blurb:'Race to complete as many small service projects as possible.' },
+  { title:'Seven Days of Service', category:'social', blurb:'Plan and carry out a small act of service every day for a week.' },
+  { title:'Welcome to the Neighborhood', category:'social', blurb:'Help a new family in the area feel welcome.' },
+  { title:'Building Self-Confidence', category:'social', blurb:'Set a personal-growth goal and get encouragement from the group.' },
+  { title:'Friends of Other Faiths', category:'social', blurb:'Host a joint activity with youth from another faith community.' },
+  { title:'Getting to Know the Adults', category:'social', blurb:'A speed-round of get-to-know-you questions with ward adults.' },
+  { title:'Manners Dinner', category:'social', blurb:'Practice good manners and etiquette over a group dinner.' },
+  { title:'Family Traditions', category:'social', blurb:'Learn about and share a family tradition.' }
+];
+
 const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -835,6 +938,28 @@ const Render = {
         </div>`;
     });
     list.innerHTML = html;
+  },
+  ideas(){
+    const list = document.getElementById('ideasList');
+    const order = ['spiritual','intellectual','physical','social'];
+    let html = `<div class="empty-state" style="padding:8px 4px 18px;text-align:left;color:var(--ink-soft);font-size:13px;">Adapted at a high level from the Church's Youth Activities guide. Tap an idea to add it to your calendar.</div>`;
+    order.forEach(catKey=>{
+      const cat = CATEGORIES[catKey];
+      html += `<div class="month-heading" style="color:${cat.color};">${cat.glyph} ${cat.label}</div>`;
+      IDEAS.forEach((idea, idx)=>{
+        if(idea.category !== catKey) return;
+        html += `
+          <div class="row">
+            <div class="cat-dot" style="background:${cat.color}"></div>
+            <div class="body">
+              <div class="title">${escapeHtml(idea.title)}</div>
+              <div class="sub">${escapeHtml(idea.blurb)}</div>
+            </div>
+            <div class="row-actions"><button class="btn-mini primary" onclick="ActivityForm.openFromIdea(${idx})">Add to calendar</button></div>
+          </div>`;
+      });
+    });
+    list.innerHTML = html;
   }
 };
 
@@ -844,8 +969,10 @@ const Tabs = {
     state.activeTab = tab;
     document.getElementById('calendarTab').classList.toggle('hidden', tab!=='calendar');
     document.getElementById('planningTab').classList.toggle('hidden', tab!=='planning');
+    document.getElementById('ideasTab').classList.toggle('hidden', tab!=='ideas');
     document.getElementById('tabCalendarBtn').classList.toggle('active', tab==='calendar');
     document.getElementById('tabPlanningBtn').classList.toggle('active', tab==='planning');
+    document.getElementById('tabIdeasBtn').classList.toggle('active', tab==='ideas');
   }
 };
 
@@ -854,6 +981,12 @@ const ActivityForm = {
   current:null,
   openNew(prefillDate){
     this.current = { id:uid(), date: prefillDate || this.nextSuggestedDate(), name:'', category:'', assignments:[], notes:'', isNew:true };
+    this.render();
+  },
+  openFromIdea(index){
+    const idea = IDEAS[index];
+    if(!idea) return;
+    this.current = { id:uid(), date:this.nextSuggestedDate(), name:idea.title, category:idea.category, assignments:[], notes:'', isNew:true };
     this.render();
   },
   openEdit(id){
