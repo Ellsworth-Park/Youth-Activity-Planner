@@ -435,7 +435,7 @@
     </div>
     <div id="setupNewForm" class="hidden" style="text-align:left;">
       <div class="field"><label>Your new sync code</label><div class="code-display" id="newCodeDisplay">------</div></div>
-      <div class="field"><label>Quorum or class name (optional)</label><input type="text" id="newClassName" placeholder="e.g. Beehives, Deacons Quorum"></div>
+      <div class="field"><label>Quorum or class name (optional)</label><input type="text" id="newClassName" placeholder="e.g. Priests, Gatherers"></div>
       <div class="field"><label>Usual activity day</label>
         <select id="newWeekday">
           <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
@@ -459,9 +459,14 @@
           <div class="subtitle" id="className">&nbsp;</div>
         </div>
       </div>
-      <button class="icon-btn" onclick="Settings.open()" aria-label="Settings">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
+      <div style="display:flex;gap:8px;">
+        <button class="icon-btn" onclick="Exporter.open()" aria-label="Share upcoming plans">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
+        <button class="icon-btn" onclick="Settings.open()" aria-label="Settings">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </header>
 
     <div class="sync-status"><span class="sync-dot" id="syncDot"></span><span id="syncText">Synced</span></div>
@@ -735,6 +740,10 @@ const Render = {
     const d = parseISO(iso);
     return { dow: DOW_NAMES[d.getDay()], dom: d.getDate(), month: MONTH_NAMES[d.getMonth()], year: d.getFullYear() };
   },
+  shortRange(fromIso, toIso){
+    const a = this.dateBits(fromIso), b = this.dateBits(toIso);
+    return `${a.month.slice(0,3)} ${a.dom} \u2013 ${b.month.slice(0,3)} ${b.dom}`;
+  },
   calendar(){
     const rows = Data.buildCalendarRows();
     const list = document.getElementById('calendarList');
@@ -859,14 +868,17 @@ const ActivityForm = {
     return dates[0] || todayISO();
   },
   addAssignment(type){
+    this.readFormIntoCurrent();
     this.current.assignments.push({ type: type||'', assignee:'' });
     this.render();
   },
   removeAssignment(idx){
+    this.readFormIntoCurrent();
     this.current.assignments.splice(idx,1);
     this.render();
   },
   setCategory(cat){
+    this.readFormIntoCurrent();
     this.current.category = cat;
     this.render();
   },
@@ -950,7 +962,75 @@ const ActivityForm = {
   }
 };
 
-// ---------------- Settings modal ----------------
+// ---------------- Export / share ----------------
+const Exporter = {
+  open(){
+    const from = todayISO();
+    const to = fmtISO(new Date(Date.now() + 56*24*3600*1000));
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay center';
+    overlay.id = 'exportOverlay';
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>Share upcoming plans</h2>
+        <div class="field"><label>From</label><input type="date" id="exportFrom" value="${from}"></div>
+        <div class="field"><label>To</label><input type="date" id="exportTo" value="${to}"></div>
+        <button class="btn primary" style="width:100%;margin-bottom:6px;" onclick="Exporter.generate()">Generate list</button>
+        <div id="exportResult"></div>
+        <div class="sheet-actions">
+          <button class="btn ghost" onclick="Exporter.close()">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+  close(){ const el=document.getElementById('exportOverlay'); if(el) el.remove(); },
+  generate(){
+    const from = document.getElementById('exportFrom').value;
+    const to = document.getElementById('exportTo').value;
+    if(!from || !to){ showToast('Pick both dates'); return; }
+    if(to < from){ showToast('"To" date is before "From" date'); return; }
+    const items = state.activities
+      .filter(a=>!a.isSkip && a.name && a.date>=from && a.date<=to)
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    const heading = state.settings.className ? state.settings.className : 'Youth Calendar';
+    let text = heading + '\n' + Render.shortRange(from, to) + '\n\n';
+    if(items.length===0){
+      text += '(No activities scheduled in this range)';
+    } else {
+      items.forEach(a=>{
+        const b = Render.dateBits(a.date);
+        text += `${b.dow} ${b.month.slice(0,3)} ${b.dom} \u2013 ${a.name}\n`;
+      });
+    }
+    text = text.trim();
+    const resultDiv = document.getElementById('exportResult');
+    resultDiv.innerHTML = `
+      <div class="field"><label>Preview</label><textarea id="exportText" readonly style="min-height:170px;">${escapeHtml(text)}</textarea></div>
+      <div class="sheet-actions">
+        <button class="btn ghost" onclick="Exporter.copy()">Copy</button>
+        <button class="btn primary" onclick="Exporter.share()">Share</button>
+      </div>`;
+  },
+  copy(){
+    const ta = document.getElementById('exportText');
+    ta.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(ta.value).then(()=>showToast('Copied to clipboard')).catch(()=>{
+        document.execCommand('copy'); showToast('Copied to clipboard');
+      });
+    } else {
+      document.execCommand('copy'); showToast('Copied to clipboard');
+    }
+  },
+  share(){
+    const text = document.getElementById('exportText').value;
+    if(navigator.share){
+      navigator.share({ text }).catch(()=>{});
+    } else {
+      this.copy();
+    }
+  }
+};
 const Settings = {
   open(){
     const overlay = document.createElement('div');
@@ -962,7 +1042,7 @@ const Settings = {
         <div class="field"><label>Sync code</label>
           <div class="code-display" style="font-size:22px;padding:12px;">${Store.syncCode}</div>
         </div>
-        <div class="field"><label>Quorum or class name</label><input type="text" id="setClassName" value="${escapeHtml(state.settings.className||'')}" placeholder="e.g. Beehives"></div>
+        <div class="field"><label>Quorum or class name</label><input type="text" id="setClassName" value="${escapeHtml(state.settings.className||'')}" placeholder="e.g. Priests, Gatherers"></div>
         <div class="field"><label>Usual activity day</label>
           <select id="setWeekday">
             ${DOW_NAMES.map((n,i)=>`<option value="${i}" ${state.settings.weekday===i?'selected':''}>${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]}</option>`).join('')}
