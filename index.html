@@ -137,6 +137,22 @@
   }
   .month-heading:first-child{margin-top:4px;}
 
+  .idea-cat-header{
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);
+    border-radius:14px;
+    padding:14px 14px;
+    margin:14px 2px 8px;
+    box-shadow:var(--shadow);
+    cursor:pointer;
+  }
+  .idea-cat-header:first-of-type{margin-top:2px;}
+  .idea-cat-header:active{transform:scale(0.99);}
+  .idea-cat-title{font-weight:600;font-size:15px;flex:1;}
+  .idea-cat-count{font-size:12px;color:var(--ink-faint);background:var(--bg);border-radius:20px;padding:2px 9px;}
+  .idea-chevron{color:var(--ink-faint);flex:0 0 auto;transition:transform .15s;}
+  .idea-chevron.open{transform:rotate(180deg);color:var(--ink-soft);}
+
   .row{
     background:var(--surface);
     border-radius:14px;
@@ -943,24 +959,42 @@ const Render = {
   ideas(){
     const list = document.getElementById('ideasList');
     const order = ['spiritual','intellectual','physical','social'];
-    let html = `<div class="empty-state" style="padding:8px 4px 18px;text-align:left;color:var(--ink-soft);font-size:13px;">Adapted at a high level from the Church's Youth Activities guide. Tap an idea to add it to your calendar.</div>`;
+    let html = `<div class="empty-state" style="padding:8px 4px 18px;text-align:left;color:var(--ink-soft);font-size:13px;">Adapted at a high level from the Church's Youth Activities guide. Tap a category to see ideas, then tap one to add it to your calendar.</div>`;
     order.forEach(catKey=>{
       const cat = CATEGORIES[catKey];
-      html += `<div class="month-heading" style="color:${cat.color};">${cat.glyph} ${cat.label}</div>`;
-      IDEAS.forEach((idea, idx)=>{
-        if(idea.category !== catKey) return;
-        html += `
-          <div class="row">
-            <div class="cat-dot" style="background:${cat.color}"></div>
-            <div class="body">
-              <div class="title">${escapeHtml(idea.title)}</div>
-              <div class="sub">${escapeHtml(idea.blurb)}</div>
-            </div>
-            <div class="row-actions"><button class="btn-mini primary" onclick="ActivityForm.openFromIdea(${idx})">Add to calendar</button></div>
-          </div>`;
-      });
+      const items = IDEAS.filter(idea=>idea.category===catKey);
+      const isOpen = !!Ideas.expanded[catKey];
+      html += `
+        <div class="idea-cat-header" onclick="Ideas.toggle('${catKey}')" style="border-left:4px solid ${cat.color};">
+          <span class="idea-cat-title">${cat.glyph} ${cat.label}</span>
+          <span class="idea-cat-count">${items.length}</span>
+          <svg class="idea-chevron ${isOpen?'open':''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>`;
+      if(isOpen){
+        items.forEach(idea=>{
+          const idx = IDEAS.indexOf(idea);
+          html += `
+            <div class="row">
+              <div class="cat-dot" style="background:${cat.color}"></div>
+              <div class="body">
+                <div class="title">${escapeHtml(idea.title)}</div>
+                <div class="sub">${escapeHtml(idea.blurb)}</div>
+              </div>
+              <div class="row-actions"><button class="btn-mini primary" onclick="ActivityForm.openFromIdea(${idx})">Add to calendar</button></div>
+            </div>`;
+        });
+      }
     });
     list.innerHTML = html;
+  }
+};
+
+// ---------------- Ideas tab collapse/expand state ----------------
+const Ideas = {
+  expanded: {},
+  toggle(catKey){
+    this.expanded[catKey] = !this.expanded[catKey];
+    Render.ideas();
   }
 };
 
