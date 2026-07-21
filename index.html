@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Youth Calendar</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23F0ECE3'/%3E%3Cpath d='M50 12 L62 50 L50 88 L38 50 Z' fill='%236B4E8E'/%3E%3Cpath d='M12 50 L50 38 L88 50 L50 62 Z' fill='%23C98A2E' opacity='0.001'/%3E%3Ccircle cx='50' cy='50' r='10' fill='%2326344A'/%3E%3Cpath d='M50 14 L58 50 L50 50 Z' fill='%236B4E8E'/%3E%3Cpath d='M86 50 L50 58 L50 50 Z' fill='%232E7D8C'/%3E%3Cpath d='M50 86 L42 50 L50 50 Z' fill='%23C98A2E'/%3E%3Cpath d='M14 50 L50 42 L50 50 Z' fill='%23C25B4A'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23F0ECE3'/%3E%3Ccircle cx='50' cy='50' r='10' fill='%2326344A'/%3E%3Cpath d='M50 14 L58 50 L50 50 Z' fill='%236B4E8E'/%3E%3Cpath d='M86 50 L50 58 L50 50 Z' fill='%232E7D8C'/%3E%3Cpath d='M50 86 L42 50 L50 50 Z' fill='%23C98A2E'/%3E%3Cpath d='M14 50 L50 42 L50 50 Z' fill='%23C25B4A'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F0ECE3;
+    --surface:#FFFFFF;
+    --ink:#26344A;
+    --ink-soft:#5B6B84;
+    --ink-faint:#96A2B5;
+    --line:#DFD8C8;
+    --spiritual:#6B4E8E;
+    --intellectual:#2E7D8C;
+    --physical:#C98A2E;
+    --social:#C25B4A;
+    --accent:#D9A441;
+    --danger:#B5473A;
+    --radius:16px;
+    --shadow: 0 1px 2px rgba(38,52,74,0.06), 0 4px 16px rgba(38,52,74,0.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Work Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    min-height:100dvh;
+  }
+  h1,h2,h3,.serif{
+    font-family:'Fraunces', Georgia, serif;
+    letter-spacing:-0.01em;
+  }
+  button{font-family:inherit;}
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+    position:relative;
+  }
+  /* ---------- Header ---------- */
+  header.topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 20px 14px;
+  }
+  header.topbar .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  header.topbar .mark{
+    width:30px;height:30px;flex:0 0 auto;
+  }
+  header.topbar h1{
+    font-size:22px;
+    font-weight:600;
+    margin:0;
+    line-height:1;
+  }
+  header.topbar .subtitle{
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:2px;
+  }
+  .icon-btn{
+    width:38px;height:38px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    color:var(--ink);
+  }
+  .icon-btn:active{transform:scale(0.94);}
+
+  /* ---------- Tab content ---------- */
+  main{
+    flex:1;
+    padding:0 16px 100px;
+    overflow-y:auto;
+  }
+  .hidden{display:none !important;}
+
+  /* Next up card */
+  .next-up{
+    background:var(--ink);
+    color:#fff;
+    border-radius:var(--radius);
+    padding:18px 18px;
+    margin:6px 2px 20px;
+    box-shadow:var(--shadow);
+  }
+  .next-up .eyebrow{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.09em;
+    color:rgba(255,255,255,0.65);
+    margin-bottom:6px;
+  }
+  .next-up .name{
+    font-family:'Fraunces', Georgia, serif;
+    font-size:20px;
+    font-weight:600;
+    margin-bottom:4px;
+  }
+  .next-up .meta{
+    font-size:13px;
+    color:rgba(255,255,255,0.75);
+  }
+  .next-up .assign-list{margin-top:10px;font-size:13px;color:rgba(255,255,255,0.9);}
+  .next-up .assign-list div{margin-bottom:2px;}
+
+  .month-heading{
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin:22px 4px 10px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  .month-heading:first-child{margin-top:4px;}
+
+  .row{
+    background:var(--surface);
+    border-radius:14px;
+    padding:12px 14px;
+    margin-bottom:8px;
+    box-shadow:var(--shadow);
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .row .date-chip{
+    flex:0 0 52px;
+    text-align:center;
+    color:var(--ink-soft);
+  }
+  .row .date-chip .dow{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;}
+  .row .date-chip .dom{font-family:'Fraunces',serif;font-size:20px;font-weight:600;color:var(--ink);}
+
+  .row.activity{cursor:pointer;}
+  .row .cat-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .row .body{flex:1;min-width:0;}
+  .row .title{font-weight:600;font-size:15px;}
+  .row .sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  .row.empty{color:var(--ink-soft);}
+  .row.empty .body{font-size:13px;font-style:italic;color:var(--ink-faint);}
+  .row .row-actions{display:flex;gap:6px;flex:0 0 auto;}
+  .btn-mini{
+    font-size:12px;
+    padding:7px 10px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:var(--bg);
+    color:var(--ink);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .btn-mini.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  .btn-mini:active{transform:scale(0.95);}
+
+  .row.skip{opacity:0.75;}
+  .row.skip .body{font-style:italic;color:var(--ink-faint);}
+
+  .empty-state{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--ink-soft);
+  }
+
+  /* ---------- Planning list ---------- */
+  .planning-add{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    border-radius:14px;
+    padding:15px;
+    font-size:15px;
+    font-weight:600;
+    margin:6px 2px 18px;
+    cursor:pointer;
+  }
+  .planning-add:active{transform:scale(0.98);}
+
+  /* ---------- Bottom tabs ---------- */
+  nav.tabbar{
+    position:fixed;
+    left:0;right:0;bottom:0;
+    max-width:480px;
+    margin:0 auto;
+    background:var(--surface);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    gap:6px;
+  }
+  nav.tabbar button{
+    flex:1;
+    border:none;background:none;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:8px 0 4px;
+    border-radius:12px;
+    color:var(--ink-faint);
+    cursor:pointer;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.02em;
+  }
+  nav.tabbar button.active{color:var(--ink);background:var(--bg);}
+  nav.tabbar svg{width:22px;height:22px;}
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position:fixed;inset:0;
+    background:rgba(38,52,74,0.45);
+    display:flex;align-items:flex-end;
+    z-index:40;
+  }
+  .overlay.center{align-items:center;padding:20px;}
+  .sheet{
+    background:var(--bg);
+    width:100%;
+    max-width:480px;
+    margin:0 auto;
+    border-radius:22px 22px 0 0;
+    max-height:92vh;
+    overflow-y:auto;
+    padding:22px 20px calc(28px + env(safe-area-inset-bottom));
+  }
+  .overlay.center .sheet{border-radius:20px;max-height:88vh;}
+  .sheet h2{font-size:20px;margin:0 0 18px;}
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;font-size:12px;font-weight:600;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:0.05em;margin-bottom:7px;
+  }
+  .field input[type=text], .field input[type=date], .field textarea, .field select{
+    width:100%;
+    padding:12px 13px;
+    border-radius:11px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    font-size:15px;
+    color:var(--ink);
+    font-family:inherit;
+  }
+  .field textarea{resize:vertical;min-height:60px;}
+
+  /* Compass category picker — signature element */
+  .compass{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    grid-template-rows:1fr 1fr 1fr;
+    grid-template-areas:
+      ".    n    ."
+      "w    c    e"
+      ".    s    .";
+    gap:8px;
+    max-width:280px;
+    margin:0 auto 6px;
+    aspect-ratio:1;
+  }
+  .compass .pt{
+    border-radius:16px;
+    border:2px solid transparent;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;
+    cursor:pointer;
+    color:#fff;
+    font-size:11px;
+    font-weight:600;
+    text-align:center;
+    padding:6px 4px;
+    opacity:0.55;
+    transition:opacity .15s, transform .1s;
+  }
+  .compass .pt:active{transform:scale(0.95);}
+  .compass .pt.selected{opacity:1;border-color:rgba(38,52,74,0.55);box-shadow:var(--shadow);}
+  .compass .pt .glyph{font-size:17px;line-height:1;}
+  .compass .n{grid-area:n;background:var(--spiritual);}
+  .compass .e{grid-area:e;background:var(--intellectual);}
+  .compass .s{grid-area:s;background:var(--physical);}
+  .compass .w{grid-area:w;background:var(--social);}
+  .compass .c{
+    grid-area:c;
+    border-radius:50%;
+    background:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,0.85);
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:0.03em;
+    text-align:center;
+    line-height:1.15;
+    padding:4px;
+  }
+
+  .assign-row{
+    display:flex;gap:8px;margin-bottom:8px;
+  }
+  .assign-row input{
+    flex:1;
+    padding:11px 12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    font-size:14px;
+    font-family:inherit;
+  }
+  .assign-row .rm{
+    flex:0 0 auto;
+    width:38px;height:38px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--danger);
+    cursor:pointer;
+  }
+  .chip-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;}
+  .chip{
+    font-size:12px;
+    padding:6px 11px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    cursor:pointer;
+    color:var(--ink-soft);
+  }
+  .add-assign-btn{
+    display:flex;align-items:center;gap:6px;
+    font-size:13px;font-weight:600;color:var(--ink-soft);
+    background:none;border:1px dashed var(--line);
+    border-radius:10px;padding:9px 12px;width:100%;
+    justify-content:center;cursor:pointer;margin-top:2px;
+  }
+
+  .sheet-actions{display:flex;gap:10px;margin-top:20px;}
+  .btn{
+    flex:1;
+    padding:14px;
+    border-radius:12px;
+    border:none;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn.primary{background:var(--ink);color:#fff;}
+  .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line);}
+  .btn.danger-text{background:none;color:var(--danger);flex:0 0 auto;padding:14px 8px;}
+  .btn:active{transform:scale(0.98);}
+
+  /* Setup / settings */
+  .setup-screen{
+    flex:1;display:flex;flex-direction:column;justify-content:center;
+    padding:30px 26px;text-align:center;
+  }
+  .setup-screen .mark-big{width:64px;height:64px;margin:0 auto 18px;}
+  .setup-screen h1{font-size:27px;margin:0 0 8px;}
+  .setup-screen p{color:var(--ink-soft);font-size:14px;line-height:1.5;margin:0 0 26px;}
+  .setup-choice{
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .setup-card{
+    background:var(--surface);
+    border-radius:16px;
+    padding:18px;
+    text-align:left;
+    border:1px solid var(--line);
+    cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  .setup-card h3{margin:0 0 4px;font-size:16px;}
+  .setup-card p{margin:0;font-size:13px;color:var(--ink-soft);}
+
+  .code-display{
+    font-family:'Fraunces',serif;
+    font-size:30px;font-weight:700;letter-spacing:0.08em;
+    background:var(--surface);border-radius:14px;padding:16px;
+    margin:16px 0;color:var(--ink);
+  }
+  .toast{
+    position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 18px;border-radius:20px;
+    font-size:13px;box-shadow:var(--shadow);z-index:60;
+    opacity:0;transition:opacity .2s;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:#3F9C5B;display:inline-block;margin-right:5px;}
+  .sync-dot.syncing{background:var(--accent);}
+  .sync-status{font-size:11px;color:var(--ink-soft);display:flex;align-items:center;padding:0 4px 8px;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ============ FIRST-RUN SETUP ============ -->
+  <div class="setup-screen" id="setupScreen">
+    <svg class="mark-big" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#F0ECE3"/><circle cx="50" cy="50" r="10" fill="#26344A"/><path d="M50 14 L58 50 L50 50 Z" fill="#6B4E8E"/><path d="M86 50 L50 58 L50 50 Z" fill="#2E7D8C"/><path d="M50 86 L42 50 L50 50 Z" fill="#C98A2E"/><path d="M14 50 L50 42 L50 50 Z" fill="#C25B4A"/></svg>
+    <h1>Youth Calendar</h1>
+    <p>Plan activities across spiritual, intellectual, physical &amp; social growth — synced with your quorum or class.</p>
+    <div class="setup-choice" id="setupChoice">
+      <div class="setup-card" onclick="Setup.showJoin()">
+        <h3>Join a group</h3>
+        <p>Enter the sync code your quorum or class is already using.</p>
+      </div>
+      <div class="setup-card" onclick="Setup.startNew()">
+        <h3>Start a new group</h3>
+        <p>Create a fresh sync code to share with co-leaders.</p>
+      </div>
+    </div>
+    <div id="setupJoinForm" class="hidden" style="text-align:left;">
+      <div class="field"><label>Sync code</label><input type="text" id="joinCodeInput" placeholder="e.g. 7KQPXM" style="text-transform:uppercase;"></div>
+      <div class="sheet-actions">
+        <button class="btn ghost" onclick="Setup.back()">Back</button>
+        <button class="btn primary" onclick="Setup.confirmJoin()">Join</button>
+      </div>
+    </div>
+    <div id="setupNewForm" class="hidden" style="text-align:left;">
+      <div class="field"><label>Your new sync code</label><div class="code-display" id="newCodeDisplay">------</div></div>
+      <div class="field"><label>Quorum or class name (optional)</label><input type="text" id="newClassName" placeholder="e.g. Beehives, Deacons Quorum"></div>
+      <div class="field"><label>Usual activity day</label>
+        <select id="newWeekday">
+          <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+          <option value="3" selected>Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+        </select>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" onclick="Setup.back()">Back</button>
+        <button class="btn primary" onclick="Setup.confirmNew()">Start planning</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN APP ============ -->
+  <div id="mainApp" class="hidden" style="display:contents;">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#F0ECE3"/><circle cx="50" cy="50" r="10" fill="#26344A"/><path d="M50 14 L58 50 L50 50 Z" fill="#6B4E8E"/><path d="M86 50 L50 58 L50 50 Z" fill="#2E7D8C"/><path d="M50 86 L42 50 L50 50 Z" fill="#C98A2E"/><path d="M14 50 L50 42 L50 50 Z" fill="#C25B4A"/></svg>
+        <div>
+          <h1>Youth Calendar</h1>
+          <div class="subtitle" id="className">&nbsp;</div>
+        </div>
+      </div>
+      <button class="icon-btn" onclick="Settings.open()" aria-label="Settings">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <div class="sync-status"><span class="sync-dot" id="syncDot"></span><span id="syncText">Synced</span></div>
+
+    <main>
+      <!-- Calendar tab -->
+      <div id="calendarTab">
+        <div id="nextUpWrap"></div>
+        <div id="calendarList"></div>
+      </div>
+      <!-- Planning tab -->
+      <div id="planningTab" class="hidden">
+        <button class="planning-add" onclick="ActivityForm.openNew()">+ New activity</button>
+        <div id="planningList"></div>
+      </div>
+    </main>
+
+    <nav class="tabbar">
+      <button id="tabCalendarBtn" class="active" onclick="Tabs.show('calendar')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Calendar
+      </button>
+      <button id="tabPlanningBtn" onclick="Tabs.show('planning')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Planning
+      </button>
+    </nav>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   YOUTH CALENDAR — youth activity planner
+   Single-file app. LocalStorage-first, Supabase REST sync.
+   ========================================================= */
+
+// ---- Supabase config: fill in your project's anon key below ----
+const SUPABASE_URL = 'https://ctxnyfgdiugzhskumqpm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4eGpmcnBqZHVjdXF5dG95d3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNzkzOTIsImV4cCI6MjA5ODg1NTM5Mn0.xYMvy7e5pMrX3sfjP7sYL-w3_JCAC7xbvJ-IdVoEUHo';
+
+const CATEGORIES = {
+  spiritual:    { label:'Spiritual',    color:'var(--spiritual)',    glyph:'✦' },
+  intellectual: { label:'Intellectual', color:'var(--intellectual)', glyph:'✎' },
+  physical:     { label:'Physical',     color:'var(--physical)',     glyph:'⛰' },
+  social:       { label:'Social',       color:'var(--social)',       glyph:'♥' }
+};
+const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// ---------------- Utilities ----------------
+function uid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{ const r=Math.random()*16|0; const v=c==='x'?r:(r&0x3|0x8); return v.toString(16); }); }
+function todayISO(){ return fmtISO(new Date()); }
+function fmtISO(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
+function nowIso(){ return new Date().toISOString(); }
+function genCode(){ const alphabet='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c=''; for(let i=0;i<6;i++) c+=alphabet[Math.random()*alphabet.length|0]; return c; }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'), 2200); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function generateWeekdayDates(weekday, monthsAhead){
+  const dates=[];
+  const today=new Date(); today.setHours(0,0,0,0);
+  let d=new Date(today);
+  while(d.getDay()!==weekday){ d.setDate(d.getDate()+1); }
+  const end=new Date(today); end.setMonth(end.getMonth()+monthsAhead);
+  while(d<=end){ dates.push(fmtISO(d)); d.setDate(d.getDate()+7); }
+  return dates;
+}
+
+// ---------------- Storage ----------------
+const Store = {
+  get syncCode(){ return localStorage.getItem('yc_sync_code') || ''; },
+  set syncCode(v){ localStorage.setItem('yc_sync_code', v); },
+  get settings(){
+    const raw = localStorage.getItem('yc_settings_'+this.syncCode);
+    return raw ? JSON.parse(raw) : { weekday:3, className:'' };
+  },
+  set settings(v){ localStorage.setItem('yc_settings_'+this.syncCode, JSON.stringify(v)); },
+  get activities(){
+    const raw = localStorage.getItem('yc_activities_'+this.syncCode);
+    return raw ? JSON.parse(raw) : [];
+  },
+  set activities(v){ localStorage.setItem('yc_activities_'+this.syncCode, JSON.stringify(v)); }
+};
+
+const state = { activities: [], settings: { weekday:3, className:'' }, activeTab:'calendar' };
+
+// ---------------- Supabase REST ----------------
+const SB = {
+  headers(extra){ return Object.assign({ 'apikey':SUPABASE_ANON_KEY, 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'Content-Type':'application/json' }, extra||{}); },
+  async fetchActivities(code){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?sync_code=eq.${encodeURIComponent(code)}&order=date.asc`, { headers:this.headers() });
+    if(!res.ok) throw new Error('fetch activities failed: '+res.status);
+    return res.json();
+  },
+  async upsertActivity(record){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?on_conflict=id`, {
+      method:'POST', headers:this.headers({'Prefer':'resolution=merge-duplicates,return=representation'}), body:JSON.stringify([record])
+    });
+    if(!res.ok) throw new Error('upsert failed: '+res.status);
+    return res.json();
+  },
+  async deleteActivity(id){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?id=eq.${id}`, { method:'DELETE', headers:this.headers() });
+    if(!res.ok) throw new Error('delete failed: '+res.status);
+  },
+  async fetchSettings(code){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_settings?sync_code=eq.${encodeURIComponent(code)}`, { headers:this.headers() });
+    if(!res.ok) throw new Error('fetch settings failed: '+res.status);
+    const rows = await res.json();
+    return rows[0] || null;
+  },
+  async upsertSettings(record){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_settings?on_conflict=sync_code`, {
+      method:'POST', headers:this.headers({'Prefer':'resolution=merge-duplicates,return=representation'}), body:JSON.stringify([record])
+    });
+    if(!res.ok) throw new Error('upsert settings failed: '+res.status);
+    return res.json();
+  }
+};
+
+function keyReady(){ return SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('PASTE_YOUR') === -1; }
+
+// ---------------- Sync ----------------
+const Sync = {
+  syncing:false,
+  setStatus(mode, text){
+    const dot=document.getElementById('syncDot'), txt=document.getElementById('syncText');
+    if(!dot) return;
+    dot.classList.toggle('syncing', mode==='syncing');
+    dot.style.background = mode==='offline' ? '#96A2B5' : (mode==='syncing' ? 'var(--accent)' : '#3F9C5B');
+    txt.textContent = text;
+  },
+  async pushLocalOnly(){
+    // push any locally-created activities not yet confirmed remote (id-based; safe to just push all — upserts are idempotent)
+  },
+  async full(){
+    if(!keyReady()){ this.setStatus('offline','Add your Supabase key to enable sync'); return; }
+    if(this.syncing) return;
+    this.syncing = true;
+    this.setStatus('syncing','Syncing…');
+    try{
+      const code = Store.syncCode;
+      const [remoteActivities, remoteSettings] = await Promise.all([ SB.fetchActivities(code), SB.fetchSettings(code) ]);
+      const localById = {};
+      state.activities.forEach(a=>{ localById[a.id]=a; });
+      const remoteById = {};
+      remoteActivities.forEach(r=>{ remoteById[r.id]={ id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at }; });
+
+      const merged = {};
+      const allIds = new Set([...Object.keys(localById), ...Object.keys(remoteById)]);
+      const toPush = [];
+      allIds.forEach(id=>{
+        const l = localById[id], r = remoteById[id];
+        if(l && r){
+          merged[id] = (new Date(l.updatedAt) > new Date(r.updatedAt)) ? l : r;
+          if(new Date(l.updatedAt) > new Date(r.updatedAt)) toPush.push(merged[id]);
+        } else if(l && !r){
+          merged[id] = l; toPush.push(l);
+        } else if(r && !l){
+          merged[id] = r;
+        }
+      });
+      state.activities = Object.values(merged).sort((a,b)=> a.date.localeCompare(b.date));
+      Store.activities = state.activities;
+
+      // settings merge (last-write-wins, keep local if newer or remote absent)
+      if(remoteSettings){
+        const remoteUpdated = remoteSettings.updated_at;
+        const localUpdated = state.settings.updatedAt || '1970-01-01';
+        if(new Date(remoteUpdated) > new Date(localUpdated)){
+          state.settings = { weekday: remoteSettings.weekday, className: remoteSettings.class_name||'', updatedAt: remoteUpdated };
+          Store.settings = state.settings;
+        } else {
+          await SB.upsertSettings({ sync_code:code, weekday:state.settings.weekday, class_name:state.settings.className, updated_at: nowIso() });
+        }
+      } else {
+        await SB.upsertSettings({ sync_code:code, weekday:state.settings.weekday, class_name:state.settings.className, updated_at: nowIso() });
+      }
+
+      for(const rec of toPush){
+        await SB.upsertActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt });
+      }
+
+      this.setStatus('online','Synced');
+      Render.all();
+    }catch(err){
+      console.error(err);
+      this.setStatus('offline','Sync failed — using local data');
+    }finally{
+      this.syncing=false;
+    }
+  },
+  async pushOne(activity){
+    if(!keyReady()) return;
+    try{
+      await SB.upsertActivity({ id:activity.id, sync_code:Store.syncCode, date:activity.date, name:activity.name, category:activity.category, assignments:activity.assignments, is_skip:activity.isSkip, notes:activity.notes||'', updated_at:activity.updatedAt });
+    }catch(err){ console.error('push failed', err); showToast('Saved locally — will sync when online'); }
+  },
+  async pushDelete(id){
+    if(!keyReady()) return;
+    try{ await SB.deleteActivity(id); }catch(err){ console.error('delete sync failed', err); }
+  },
+  async pushSettings(){
+    if(!keyReady()) return;
+    try{ await SB.upsertSettings({ sync_code:Store.syncCode, weekday:state.settings.weekday, class_name:state.settings.className, updated_at: state.settings.updatedAt }); }
+    catch(err){ console.error('settings sync failed', err); }
+  }
+};
+
+// ---------------- Data ops ----------------
+const Data = {
+  save(activity){
+    activity.updatedAt = nowIso();
+    const idx = state.activities.findIndex(a=>a.id===activity.id);
+    if(idx>=0) state.activities[idx]=activity; else state.activities.push(activity);
+    state.activities.sort((a,b)=>a.date.localeCompare(b.date));
+    Store.activities = state.activities;
+    Render.all();
+    Sync.pushOne(activity);
+  },
+  remove(id){
+    state.activities = state.activities.filter(a=>a.id!==id);
+    Store.activities = state.activities;
+    Render.all();
+    Sync.pushDelete(id);
+  },
+  markSkip(date){
+    const existing = state.activities.find(a=>a.date===date);
+    const rec = existing || { id:uid(), date, name:'', category:'', assignments:[], notes:'' };
+    rec.isSkip = true;
+    rec.name = rec.name || 'No activity';
+    this.save(rec);
+    showToast('Marked as a week off');
+  },
+  unmarkSkip(id){ this.remove(id); },
+  buildCalendarRows(){
+    const weekday = state.settings.weekday ?? 3;
+    const placeholderDates = generateWeekdayDates(weekday, 6);
+    const byDate = {};
+    state.activities.forEach(a=>{ byDate[a.date]=a; });
+    const allDatesSet = new Set([...placeholderDates, ...state.activities.map(a=>a.date)]);
+    const allDates = Array.from(allDatesSet).sort();
+    const today = todayISO();
+    const rows = [];
+    allDates.forEach(date=>{
+      if(date < today) return;
+      const rec = byDate[date];
+      if(rec) rows.push({ date, kind: rec.isSkip ? 'skip':'activity', record: rec });
+      else if(placeholderDates.includes(date)) rows.push({ date, kind:'empty' });
+    });
+    return rows;
+  },
+  upcomingReal(){
+    const today = todayISO();
+    return state.activities.filter(a=>!a.isSkip && a.date>=today).sort((a,b)=>a.date.localeCompare(b.date));
+  }
+};
+
+// ---------------- Render ----------------
+const Render = {
+  all(){
+    document.getElementById('className').textContent = state.settings.className || '';
+    this.calendar();
+    this.planning();
+  },
+  dateBits(iso){
+    const d = parseISO(iso);
+    return { dow: DOW_NAMES[d.getDay()], dom: d.getDate(), month: MONTH_NAMES[d.getMonth()], year: d.getFullYear() };
+  },
+  calendar(){
+    const rows = Data.buildCalendarRows();
+    const list = document.getElementById('calendarList');
+    const nextUpWrap = document.getElementById('nextUpWrap');
+
+    const nextReal = rows.find(r=>r.kind==='activity');
+    if(nextReal){
+      const rec = nextReal.record;
+      const b = this.dateBits(rec.date);
+      const cat = CATEGORIES[rec.category];
+      nextUpWrap.innerHTML = `
+        <div class="next-up">
+          <div class="eyebrow">Next up · ${b.dow} ${b.month} ${b.dom}</div>
+          <div class="name">${escapeHtml(rec.name)}</div>
+          <div class="meta">${cat ? cat.glyph+' '+cat.label : ''}</div>
+          ${rec.assignments && rec.assignments.length ? `<div class="assign-list">${rec.assignments.map(a=>`<div>${escapeHtml(a.type)}: ${escapeHtml(a.assignee)||'<span style=\"opacity:.6\">unassigned</span>'}</div>`).join('')}</div>` : ''}
+        </div>`;
+    } else {
+      nextUpWrap.innerHTML = '';
+    }
+
+    if(rows.length===0){
+      list.innerHTML = `<div class="empty-state">Nothing on the calendar yet.</div>`;
+      return;
+    }
+
+    let html = '';
+    let lastMonth = '';
+    rows.forEach(row=>{
+      const b = this.dateBits(row.date);
+      const monthKey = b.month+' '+b.year;
+      if(monthKey !== lastMonth){
+        html += `<div class="month-heading">${monthKey}</div>`;
+        lastMonth = monthKey;
+      }
+      if(row.kind==='activity'){
+        const rec = row.record; const cat = CATEGORIES[rec.category] || {color:'var(--ink-faint)',label:''};
+        const assignCount = (rec.assignments||[]).length;
+        html += `
+          <div class="row activity" onclick="ActivityForm.openEdit('${rec.id}')">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="cat-dot" style="background:${cat.color}"></div>
+            <div class="body">
+              <div class="title">${escapeHtml(rec.name)}</div>
+              <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}</div>
+            </div>
+          </div>`;
+      } else if(row.kind==='skip'){
+        html += `
+          <div class="row skip">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="body">No activity — week off</div>
+            <div class="row-actions"><button class="btn-mini" onclick="Data.unmarkSkip('${row.record.id}')">Undo</button></div>
+          </div>`;
+      } else {
+        html += `
+          <div class="row empty">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="body">No activity planned</div>
+            <div class="row-actions">
+              <button class="btn-mini" onclick="Data.markSkip('${row.date}')">Week off</button>
+              <button class="btn-mini primary" onclick="ActivityForm.openNew('${row.date}')">+ Add</button>
+            </div>
+          </div>`;
+      }
+    });
+    list.innerHTML = html;
+  },
+  planning(){
+    const items = Data.upcomingReal();
+    const list = document.getElementById('planningList');
+    if(items.length===0){
+      list.innerHTML = `<div class="empty-state">No upcoming activities yet. Tap “New activity” to plan one.</div>`;
+      return;
+    }
+    let html='';
+    items.forEach(rec=>{
+      const b = this.dateBits(rec.date);
+      const cat = CATEGORIES[rec.category] || {color:'var(--ink-faint)',label:''};
+      const assignCount = (rec.assignments||[]).length;
+      html += `
+        <div class="row activity" onclick="ActivityForm.openEdit('${rec.id}')">
+          <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+          <div class="cat-dot" style="background:${cat.color}"></div>
+          <div class="body">
+            <div class="title">${escapeHtml(rec.name)}</div>
+            <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}</div>
+          </div>
+        </div>`;
+    });
+    list.innerHTML = html;
+  }
+};
+
+// ---------------- Tabs ----------------
+const Tabs = {
+  show(tab){
+    state.activeTab = tab;
+    document.getElementById('calendarTab').classList.toggle('hidden', tab!=='calendar');
+    document.getElementById('planningTab').classList.toggle('hidden', tab!=='planning');
+    document.getElementById('tabCalendarBtn').classList.toggle('active', tab==='calendar');
+    document.getElementById('tabPlanningBtn').classList.toggle('active', tab==='planning');
+  }
+};
+
+// ---------------- Activity form (modal) ----------------
+const ActivityForm = {
+  current:null,
+  openNew(prefillDate){
+    this.current = { id:uid(), date: prefillDate || this.nextSuggestedDate(), name:'', category:'', assignments:[], notes:'', isNew:true };
+    this.render();
+  },
+  openEdit(id){
+    const rec = state.activities.find(a=>a.id===id);
+    if(!rec) return;
+    this.current = JSON.parse(JSON.stringify(rec));
+    this.current.isNew = false;
+    this.render();
+  },
+  nextSuggestedDate(){
+    const dates = generateWeekdayDates(state.settings.weekday ?? 3, 1);
+    return dates[0] || todayISO();
+  },
+  addAssignment(type){
+    this.current.assignments.push({ type: type||'', assignee:'' });
+    this.render();
+  },
+  removeAssignment(idx){
+    this.current.assignments.splice(idx,1);
+    this.render();
+  },
+  setCategory(cat){
+    this.current.category = cat;
+    this.render();
+  },
+  close(){
+    const el = document.getElementById('activityOverlay');
+    if(el) el.remove();
+  },
+  readFormIntoCurrent(){
+    const c = this.current;
+    c.name = document.getElementById('actName').value.trim();
+    c.date = document.getElementById('actDate').value;
+    c.notes = document.getElementById('actNotes').value.trim();
+    const rows = document.querySelectorAll('.assign-row');
+    c.assignments = Array.from(rows).map(r=>({
+      type: r.querySelector('.assign-type').value.trim(),
+      assignee: r.querySelector('.assign-name').value.trim()
+    })).filter(a=>a.type || a.assignee);
+  },
+  save(){
+    this.readFormIntoCurrent();
+    const c = this.current;
+    if(!c.name){ showToast('Give the activity a name'); return; }
+    if(!c.date){ showToast('Pick a date'); return; }
+    if(!c.category){ showToast('Choose a category'); return; }
+    c.isSkip = false;
+    delete c.isNew;
+    Data.save(c);
+    this.close();
+  },
+  delete(){
+    if(!confirm('Delete this activity?')) return;
+    Data.remove(this.current.id);
+    this.close();
+  },
+  render(){
+    this.close();
+    const c = this.current;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.id = 'activityOverlay';
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${c.isNew ? 'New activity' : 'Edit activity'}</h2>
+        <div class="field"><label>Name</label><input type="text" id="actName" value="${escapeHtml(c.name)}" placeholder="e.g. Service project, Game night"></div>
+        <div class="field"><label>Date</label><input type="date" id="actDate" value="${c.date}"></div>
+        <div class="field">
+          <label>Category</label>
+          <div class="compass">
+            <div class="pt n ${c.category==='spiritual'?'selected':''}" onclick="ActivityForm.setCategory('spiritual')"><span class="glyph">✦</span>Spiritual</div>
+            <div class="pt e ${c.category==='intellectual'?'selected':''}" onclick="ActivityForm.setCategory('intellectual')"><span class="glyph">✎</span>Intellectual</div>
+            <div class="pt s ${c.category==='physical'?'selected':''}" onclick="ActivityForm.setCategory('physical')"><span class="glyph">⛰</span>Physical</div>
+            <div class="pt w ${c.category==='social'?'selected':''}" onclick="ActivityForm.setCategory('social')"><span class="glyph">♥</span>Social</div>
+            <div class="c">LUKE<br>2:52</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Assignments</label>
+          <div class="chip-row">
+            <div class="chip" onclick="ActivityForm.addAssignment('Treats')">+ Treats</div>
+            <div class="chip" onclick="ActivityForm.addAssignment('Set-up')">+ Set-up</div>
+            <div class="chip" onclick="ActivityForm.addAssignment('Phone calls')">+ Phone calls</div>
+          </div>
+          <div id="assignRows">
+            ${c.assignments.map((a,i)=>`
+              <div class="assign-row">
+                <input type="text" class="assign-type" placeholder="Assignment (e.g. Treats)" value="${escapeHtml(a.type)}">
+                <input type="text" class="assign-name" placeholder="Who" value="${escapeHtml(a.assignee)}">
+                <button class="rm" onclick="ActivityForm.removeAssignment(${i})">✕</button>
+              </div>`).join('')}
+          </div>
+          <button class="add-assign-btn" onclick="ActivityForm.addAssignment('')">+ Add assignment</button>
+        </div>
+        <div class="field"><label>Notes (optional)</label><textarea id="actNotes" placeholder="Details, location, what to bring…">${escapeHtml(c.notes||'')}</textarea></div>
+        <div class="sheet-actions">
+          ${!c.isNew ? `<button class="btn danger-text" onclick="ActivityForm.delete()">Delete</button>` : ''}
+          <button class="btn ghost" onclick="ActivityForm.close()">Cancel</button>
+          <button class="btn primary" onclick="ActivityForm.save()">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+};
+
+// ---------------- Settings modal ----------------
+const Settings = {
+  open(){
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay center';
+    overlay.id = 'settingsOverlay';
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>Settings</h2>
+        <div class="field"><label>Sync code</label>
+          <div class="code-display" style="font-size:22px;padding:12px;">${Store.syncCode}</div>
+        </div>
+        <div class="field"><label>Quorum or class name</label><input type="text" id="setClassName" value="${escapeHtml(state.settings.className||'')}" placeholder="e.g. Beehives"></div>
+        <div class="field"><label>Usual activity day</label>
+          <select id="setWeekday">
+            ${DOW_NAMES.map((n,i)=>`<option value="${i}" ${state.settings.weekday===i?'selected':''}>${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn ghost" onclick="Settings.close()">Cancel</button>
+          <button class="btn primary" onclick="Settings.save()">Save</button>
+        </div>
+        <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px;">
+          <button class="btn ghost" style="width:100%;" onclick="Settings.switchGroup()">Switch to a different group</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+  close(){ const el=document.getElementById('settingsOverlay'); if(el) el.remove(); },
+  save(){
+    state.settings.className = document.getElementById('setClassName').value.trim();
+    state.settings.weekday = parseInt(document.getElementById('setWeekday').value, 10);
+    state.settings.updatedAt = nowIso();
+    Store.settings = state.settings;
+    Render.all();
+    Sync.pushSettings();
+    this.close();
+    showToast('Settings saved');
+  },
+  switchGroup(){
+    if(!confirm('Switch groups? You can always come back to this code from the setup screen.')) return;
+    localStorage.removeItem('yc_sync_code');
+    location.reload();
+  }
+};
+
+// ---------------- First-run setup ----------------
+const Setup = {
+  showJoin(){
+    document.getElementById('setupChoice').classList.add('hidden');
+    document.getElementById('setupJoinForm').classList.remove('hidden');
+  },
+  startNew(){
+    document.getElementById('setupChoice').classList.add('hidden');
+    document.getElementById('setupNewForm').classList.remove('hidden');
+    document.getElementById('newCodeDisplay').textContent = genCode();
+  },
+  back(){
+    document.getElementById('setupJoinForm').classList.add('hidden');
+    document.getElementById('setupNewForm').classList.add('hidden');
+    document.getElementById('setupChoice').classList.remove('hidden');
+  },
+  confirmJoin(){
+    const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+    if(!code){ showToast('Enter a sync code'); return; }
+    Store.syncCode = code;
+    boot(true);
+  },
+  confirmNew(){
+    const code = document.getElementById('newCodeDisplay').textContent;
+    const className = document.getElementById('newClassName').value.trim();
+    const weekday = parseInt(document.getElementById('newWeekday').value, 10);
+    Store.syncCode = code;
+    Store.settings = { weekday, className, updatedAt: nowIso() };
+    boot(true);
+    showToast('Group created — share code '+code+' with co-leaders');
+  }
+};
+
+// ---------------- Boot ----------------
+function boot(afterSetup){
+  const code = Store.syncCode;
+  if(!code){
+    document.getElementById('setupScreen').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+    return;
+  }
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  state.activities = Store.activities;
+  state.settings = Store.settings;
+  Render.all();
+  Sync.full();
+  if(afterSetup) showToast('Welcome!');
+}
+
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && Store.syncCode) Sync.full(); });
+setInterval(()=>{ if(Store.syncCode) Sync.full(); }, 45000);
+
+boot(false);
+</script>
+</body>
+</html>
