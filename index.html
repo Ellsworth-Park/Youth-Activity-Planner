@@ -671,7 +671,12 @@ const Store = {
     const raw = localStorage.getItem('yc_activities_'+this.syncCode);
     return raw ? JSON.parse(raw) : [];
   },
-  set activities(v){ localStorage.setItem('yc_activities_'+this.syncCode, JSON.stringify(v)); }
+  set activities(v){ localStorage.setItem('yc_activities_'+this.syncCode, JSON.stringify(v)); },
+  get pendingDeletes(){
+    const raw = localStorage.getItem('yc_pending_deletes_'+this.syncCode);
+    return raw ? JSON.parse(raw) : [];
+  },
+  set pendingDeletes(v){ localStorage.setItem('yc_pending_deletes_'+this.syncCode, JSON.stringify(v)); }
 };
 
 const state = { activities: [], settings: { weekday:3, className:'' }, activeTab:'calendar' };
@@ -738,10 +743,16 @@ const Sync = {
       const remoteById = {};
       remoteActivities.forEach(r=>{ remoteById[r.id]={ id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at }; });
 
+      const pendingDeletes = new Set(Store.pendingDeletes);
       const merged = {};
       const allIds = new Set([...Object.keys(localById), ...Object.keys(remoteById)]);
       const toPush = [];
+      const stillPendingRemote = [];
       allIds.forEach(id=>{
+        if(pendingDeletes.has(id)){
+          if(remoteById[id]) stillPendingRemote.push(id);
+          return; // never let a locally-deleted item come back from the server
+        }
         const l = localById[id], r = remoteById[id];
         if(l && r){
           merged[id] = (new Date(l.updatedAt) > new Date(r.updatedAt)) ? l : r;
@@ -754,6 +765,14 @@ const Sync = {
       });
       state.activities = Object.values(merged).sort((a,b)=> a.date.localeCompare(b.date));
       Store.activities = state.activities;
+
+      // Clear pending-delete ids that are confirmed gone from the server,
+      // and retry deleting any that are still sitting there.
+      Store.pendingDeletes = Store.pendingDeletes.filter(id=>remoteById[id]);
+      for(const id of stillPendingRemote){
+        try{ await SB.deleteActivity(id); Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id); }
+        catch(err){ console.error('retry delete failed', err); }
+      }
 
       // settings merge (last-write-wins, keep local if newer or remote absent)
       if(remoteSettings){
@@ -790,7 +809,10 @@ const Sync = {
   },
   async pushDelete(id){
     if(!keyReady()) return;
-    try{ await SB.deleteActivity(id); }catch(err){ console.error('delete sync failed', err); }
+    try{
+      await SB.deleteActivity(id);
+      Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
+    }catch(err){ console.error('delete sync failed', err); }
   },
   async pushSettings(){
     if(!keyReady()) return;
@@ -813,6 +835,8 @@ const Data = {
   remove(id){
     state.activities = state.activities.filter(a=>a.id!==id);
     Store.activities = state.activities;
+    const pending = Store.pendingDeletes;
+    if(!pending.includes(id)){ pending.push(id); Store.pendingDeletes = pending; }
     Render.all();
     Sync.pushDelete(id);
   },
