@@ -685,6 +685,8 @@ const state = { activities: [], settings: { weekday:3, className:'' }, activeTab
 const SB = {
   headers(extra){ return Object.assign({ 'apikey':SUPABASE_ANON_KEY, 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'Content-Type':'application/json' }, extra||{}); },
   async fetchActivities(code){
+    // Deliberately not filtering out deleted:true rows here — every device
+    // needs to see the tombstone so it knows to drop its own local copy too.
     const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?sync_code=eq.${encodeURIComponent(code)}&order=date.asc`, { headers:this.headers() });
     if(!res.ok) throw new Error('fetch activities failed: '+res.status);
     return res.json();
@@ -696,8 +698,17 @@ const SB = {
     if(!res.ok) throw new Error('upsert failed: '+res.status);
     return res.json();
   },
-  async deleteActivity(id){
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?id=eq.${id}`, { method:'DELETE', headers:this.headers() });
+  async deleteActivity(record){
+    // Soft delete: upsert the full row with deleted:true rather than issuing
+    // a hard DELETE. A hard delete only removed the row on the server, but
+    // any other device (or this device, on a refresh before the delete had
+    // landed) had no way to tell "gone" apart from "never synced yet", so it
+    // could sync the activity right back. A tombstone row is visible to
+    // every device on their next sync, so the deletion sticks everywhere.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?on_conflict=id`, {
+      method:'POST', headers:this.headers({'Prefer':'resolution=merge-duplicates,return=representation'}),
+      body:JSON.stringify([Object.assign({}, record, { deleted:true, updated_at: nowIso() })])
+    });
     if(!res.ok) throw new Error('delete failed: '+res.status);
   },
   async fetchSettings(code){
@@ -741,19 +752,26 @@ const Sync = {
       const localById = {};
       state.activities.forEach(a=>{ localById[a.id]=a; });
       const remoteById = {};
-      remoteActivities.forEach(r=>{ remoteById[r.id]={ id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at }; });
+      remoteActivities.forEach(r=>{ remoteById[r.id]={ id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at, deleted:!!r.deleted }; });
 
+      // Local pending-delete ids: this device deleted these but hasn't yet
+      // confirmed the tombstone reached the server. Never resurrect them
+      // even if the fetch above still shows the pre-tombstone row.
       const pendingDeletes = new Set(Store.pendingDeletes);
       const merged = {};
       const allIds = new Set([...Object.keys(localById), ...Object.keys(remoteById)]);
       const toPush = [];
       const stillPendingRemote = [];
       allIds.forEach(id=>{
+        const r = remoteById[id];
+        // Server-side tombstone: some device (any device) has confirmed this
+        // deleted. That's authoritative — drop it everywhere, permanently.
+        if(r && r.deleted) return;
         if(pendingDeletes.has(id)){
-          if(remoteById[id]) stillPendingRemote.push(id);
-          return; // never let a locally-deleted item come back from the server
+          if(r) stillPendingRemote.push(id);
+          return;
         }
-        const l = localById[id], r = remoteById[id];
+        const l = localById[id];
         if(l && r){
           merged[id] = (new Date(l.updatedAt) > new Date(r.updatedAt)) ? l : r;
           if(new Date(l.updatedAt) > new Date(r.updatedAt)) toPush.push(merged[id]);
@@ -766,12 +784,15 @@ const Sync = {
       state.activities = Object.values(merged).sort((a,b)=> a.date.localeCompare(b.date));
       Store.activities = state.activities;
 
-      // Clear pending-delete ids that are confirmed gone from the server,
-      // and retry deleting any that are still sitting there.
-      Store.pendingDeletes = Store.pendingDeletes.filter(id=>remoteById[id]);
+      // Clear pending-delete ids once the tombstone is confirmed on the
+      // server, and retry the soft-delete for any that haven't landed yet.
+      Store.pendingDeletes = Store.pendingDeletes.filter(id=>remoteById[id] && !remoteById[id].deleted);
       for(const id of stillPendingRemote){
-        try{ await SB.deleteActivity(id); Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id); }
-        catch(err){ console.error('retry delete failed', err); }
+        const rec = remoteById[id];
+        try{
+          await SB.deleteActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'' });
+          Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
+        }catch(err){ console.error('retry delete failed', err); }
       }
 
       // settings merge (last-write-wins, keep local if newer or remote absent)
@@ -789,7 +810,7 @@ const Sync = {
       }
 
       for(const rec of toPush){
-        await SB.upsertActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt });
+        await SB.upsertActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt, deleted:false });
       }
 
       this.setStatus('online','Synced');
@@ -804,14 +825,14 @@ const Sync = {
   async pushOne(activity){
     if(!keyReady()) return;
     try{
-      await SB.upsertActivity({ id:activity.id, sync_code:Store.syncCode, date:activity.date, name:activity.name, category:activity.category, assignments:activity.assignments, is_skip:activity.isSkip, notes:activity.notes||'', updated_at:activity.updatedAt });
+      await SB.upsertActivity({ id:activity.id, sync_code:Store.syncCode, date:activity.date, name:activity.name, category:activity.category, assignments:activity.assignments, is_skip:activity.isSkip, notes:activity.notes||'', updated_at:activity.updatedAt, deleted:false });
     }catch(err){ console.error('push failed', err); showToast('Saved locally — will sync when online'); }
   },
-  async pushDelete(id){
+  async pushDelete(record){
     if(!keyReady()) return;
     try{
-      await SB.deleteActivity(id);
-      Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
+      await SB.deleteActivity({ id:record.id, sync_code:Store.syncCode, date:record.date, name:record.name, category:record.category, assignments:record.assignments, is_skip:record.isSkip, notes:record.notes||'' });
+      Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==record.id);
     }catch(err){ console.error('delete sync failed', err); }
   },
   async pushSettings(){
@@ -833,12 +854,13 @@ const Data = {
     Sync.pushOne(activity);
   },
   remove(id){
+    const rec = state.activities.find(a=>a.id===id);
     state.activities = state.activities.filter(a=>a.id!==id);
     Store.activities = state.activities;
     const pending = Store.pendingDeletes;
     if(!pending.includes(id)){ pending.push(id); Store.pendingDeletes = pending; }
     Render.all();
-    Sync.pushDelete(id);
+    if(rec) Sync.pushDelete(rec);
   },
   markSkip(date){
     const existing = state.activities.find(a=>a.date===date);
