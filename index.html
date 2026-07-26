@@ -1144,6 +1144,7 @@ const ActivityForm = {
           <button class="add-assign-btn" onclick="ActivityForm.addAssignment('')">+ Add assignment</button>
         </div>
         <div class="field"><label>Notes (optional)</label><textarea id="actNotes" placeholder="Details, location, what to bring…">${escapeHtml(c.notes||'')}</textarea></div>
+        ${!c.isNew ? `<button class="btn ghost" style="width:100%;margin-bottom:14px;" onclick="CalendarExport.open('${c.id}')">Add to Calendar</button>` : ''}
         <div class="sheet-actions">
           ${!c.isNew ? `<button class="btn danger-text" onclick="ActivityForm.delete()">Delete</button>` : ''}
           <button class="btn ghost" onclick="ActivityForm.close()">Cancel</button>
@@ -1151,6 +1152,108 @@ const ActivityForm = {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+  }
+};
+
+// ---------------- Calendar export (per-activity) ----------------
+const CalendarExport = {
+  activityId:null,
+  open(activityId){
+    this.activityId = activityId;
+    const rec = state.activities.find(a=>a.id===activityId);
+    if(!rec) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay center';
+    overlay.id = 'calExportOverlay';
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>Add to Calendar</h2>
+        <div class="field"><label>Activity</label>
+          <div style="font-weight:600;">${escapeHtml(rec.name)}</div>
+          <div style="font-size:13px;color:var(--ink-soft);">${rec.date}</div>
+        </div>
+        <div class="field"><label>Start time</label><input type="time" id="calExportTime" value="19:00"></div>
+        <div class="field"><label>Duration</label>
+          <select id="calExportDuration">
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="90" selected>1.5 hours</option>
+            <option value="120">2 hours</option>
+          </select>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn ghost" onclick="CalendarExport.close()">Close</button>
+          <button class="btn primary" onclick="CalendarExport.downloadICS()">Download (.ics)</button>
+        </div>
+        <button class="btn ghost" style="width:100%;margin-top:10px;" onclick="CalendarExport.openGoogle()">Add to Google Calendar</button>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:12px;text-align:center;">The .ics download works with Apple Calendar, Outlook, and most other calendar apps.</div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },
+  close(){ const el=document.getElementById('calExportOverlay'); if(el) el.remove(); },
+  details(){
+    const rec = state.activities.find(a=>a.id===this.activityId);
+    const time = document.getElementById('calExportTime').value || '19:00';
+    const duration = parseInt(document.getElementById('calExportDuration').value, 10) || 90;
+    const [h,m] = time.split(':').map(Number);
+    const start = parseISO(rec.date);
+    start.setHours(h, m, 0, 0);
+    const end = new Date(start.getTime() + duration*60000);
+    const assignLines = (rec.assignments||[]).filter(a=>a.type||a.assignee).map(a=>`${a.type}: ${a.assignee||'unassigned'}`);
+    const descParts = [];
+    if(assignLines.length) descParts.push(assignLines.join('\n'));
+    if(rec.notes) descParts.push(rec.notes);
+    return { rec, start, end, description: descParts.join('\n\n') };
+  },
+  pad(n){ return String(n).padStart(2,'0'); },
+  icsDate(d){
+    return d.getFullYear()+this.pad(d.getMonth()+1)+this.pad(d.getDate())+'T'+this.pad(d.getHours())+this.pad(d.getMinutes())+'00';
+  },
+  icsEscape(s){
+    return (s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  },
+  buildICS(){
+    const { rec, start, end, description } = this.details();
+    const now = new Date();
+    const stamp = now.getUTCFullYear()+this.pad(now.getUTCMonth()+1)+this.pad(now.getUTCDate())+'T'+this.pad(now.getUTCHours())+this.pad(now.getUTCMinutes())+this.pad(now.getUTCSeconds())+'Z';
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Youth Calendar//EN',
+      'BEGIN:VEVENT',
+      'UID:'+rec.id+'@youthcalendar',
+      'DTSTAMP:'+stamp,
+      'DTSTART:'+this.icsDate(start),
+      'DTEND:'+this.icsDate(end),
+      'SUMMARY:'+this.icsEscape(rec.name),
+      'DESCRIPTION:'+this.icsEscape(description),
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ];
+    return lines.join('\r\n');
+  },
+  downloadICS(){
+    const ics = this.buildICS();
+    const rec = state.activities.find(a=>a.id===this.activityId);
+    const blob = new Blob([ics], { type:'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (rec.name || 'activity').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.ics';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    showToast('Calendar file downloaded');
+  },
+  openGoogle(){
+    const { rec, start, end, description } = this.details();
+    const fmt = d => d.getFullYear()+this.pad(d.getMonth()+1)+this.pad(d.getDate())+'T'+this.pad(d.getHours())+this.pad(d.getMinutes())+'00';
+    const url = 'https://www.google.com/calendar/render?action=TEMPLATE'
+      + '&text=' + encodeURIComponent(rec.name)
+      + '&dates=' + fmt(start) + '/' + fmt(end)
+      + '&details=' + encodeURIComponent(description);
+    window.open(url, '_blank');
   }
 };
 
