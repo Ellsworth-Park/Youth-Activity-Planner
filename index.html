@@ -501,6 +501,10 @@
       <div id="ideasTab" class="hidden">
         <div id="ideasList"></div>
       </div>
+      <!-- Lessons tab -->
+      <div id="lessonsTab" class="hidden">
+        <div id="lessonsList"></div>
+      </div>
     </main>
 
     <nav class="tabbar">
@@ -515,6 +519,10 @@
       <button id="tabIdeasBtn" onclick="Tabs.show('ideas')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3Z"/></svg>
         Ideas
+      </button>
+      <button id="tabLessonsBtn" onclick="Tabs.show('lessons')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+        Lessons
       </button>
     </nav>
   </div>
@@ -676,10 +684,20 @@ const Store = {
     const raw = localStorage.getItem('yc_pending_deletes_'+this.syncCode);
     return raw ? JSON.parse(raw) : [];
   },
-  set pendingDeletes(v){ localStorage.setItem('yc_pending_deletes_'+this.syncCode, JSON.stringify(v)); }
+  set pendingDeletes(v){ localStorage.setItem('yc_pending_deletes_'+this.syncCode, JSON.stringify(v)); },
+  get lessons(){
+    const raw = localStorage.getItem('yc_lessons_'+this.syncCode);
+    return raw ? JSON.parse(raw) : [];
+  },
+  set lessons(v){ localStorage.setItem('yc_lessons_'+this.syncCode, JSON.stringify(v)); },
+  get pendingLessonDeletes(){
+    const raw = localStorage.getItem('yc_pending_lesson_deletes_'+this.syncCode);
+    return raw ? JSON.parse(raw) : [];
+  },
+  set pendingLessonDeletes(v){ localStorage.setItem('yc_pending_lesson_deletes_'+this.syncCode, JSON.stringify(v)); }
 };
 
-const state = { activities: [], settings: { weekday:3, className:'' }, activeTab:'calendar' };
+const state = { activities: [], lessons: [], settings: { weekday:3, className:'' }, activeTab:'calendar' };
 
 // ---------------- Supabase REST ----------------
 const SB = {
@@ -723,12 +741,67 @@ const SB = {
     });
     if(!res.ok) throw new Error('upsert settings failed: '+res.status);
     return res.json();
+  },
+  async fetchLessons(code){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_lessons?sync_code=eq.${encodeURIComponent(code)}&order=date.asc`, { headers:this.headers() });
+    if(!res.ok) throw new Error('fetch lessons failed: '+res.status);
+    return res.json();
+  },
+  async upsertLesson(record){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_lessons?on_conflict=id`, {
+      method:'POST', headers:this.headers({'Prefer':'resolution=merge-duplicates,return=representation'}), body:JSON.stringify([record])
+    });
+    if(!res.ok) throw new Error('upsert lesson failed: '+res.status);
+    return res.json();
+  },
+  async deleteLesson(record){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_lessons?on_conflict=id`, {
+      method:'POST', headers:this.headers({'Prefer':'resolution=merge-duplicates,return=representation'}),
+      body:JSON.stringify([Object.assign({}, record, { deleted:true, updated_at: nowIso() })])
+    });
+    if(!res.ok) throw new Error('delete lesson failed: '+res.status);
   }
 };
 
 function keyReady(){ return SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('PASTE_YOUR') === -1; }
 
 // ---------------- Sync ----------------
+// Merges a local list with a remote fetch, honoring soft-delete tombstones
+// and per-device pending-delete markers. Shared by activities and lessons
+// so both get the same sync/delete guarantees.
+function mergeByTombstone(localList, remoteRows, mapRemoteRow, pendingDeleteIds){
+  const localById = {};
+  localList.forEach(a=>{ localById[a.id]=a; });
+  const remoteById = {};
+  remoteRows.forEach(r=>{ remoteById[r.id] = mapRemoteRow(r); });
+  const pendingSet = new Set(pendingDeleteIds);
+  const merged = {};
+  const allIds = new Set([...Object.keys(localById), ...Object.keys(remoteById)]);
+  const toPush = [];
+  const stillPendingRemote = [];
+  allIds.forEach(id=>{
+    const r = remoteById[id];
+    if(r && r.deleted) return; // authoritative server tombstone — drop everywhere
+    if(pendingSet.has(id)){
+      if(r) stillPendingRemote.push(id);
+      return;
+    }
+    const l = localById[id];
+    if(l && r){
+      merged[id] = (new Date(l.updatedAt) > new Date(r.updatedAt)) ? l : r;
+      if(new Date(l.updatedAt) > new Date(r.updatedAt)) toPush.push(merged[id]);
+    } else if(l && !r){
+      merged[id] = l; toPush.push(l);
+    } else if(r && !l){
+      merged[id] = r;
+    }
+  });
+  return {
+    merged: Object.values(merged).sort((a,b)=>a.date.localeCompare(b.date)),
+    toPush, stillPendingRemote, remoteById
+  };
+}
+
 const Sync = {
   syncing:false,
   setStatus(mode, text){
@@ -748,51 +821,38 @@ const Sync = {
     this.setStatus('syncing','Syncing…');
     try{
       const code = Store.syncCode;
-      const [remoteActivities, remoteSettings] = await Promise.all([ SB.fetchActivities(code), SB.fetchSettings(code) ]);
-      const localById = {};
-      state.activities.forEach(a=>{ localById[a.id]=a; });
-      const remoteById = {};
-      remoteActivities.forEach(r=>{ remoteById[r.id]={ id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at, deleted:!!r.deleted }; });
+      const [remoteActivities, remoteLessons, remoteSettings] = await Promise.all([
+        SB.fetchActivities(code), SB.fetchLessons(code), SB.fetchSettings(code)
+      ]);
 
-      // Local pending-delete ids: this device deleted these but hasn't yet
-      // confirmed the tombstone reached the server. Never resurrect them
-      // even if the fetch above still shows the pre-tombstone row.
-      const pendingDeletes = new Set(Store.pendingDeletes);
-      const merged = {};
-      const allIds = new Set([...Object.keys(localById), ...Object.keys(remoteById)]);
-      const toPush = [];
-      const stillPendingRemote = [];
-      allIds.forEach(id=>{
-        const r = remoteById[id];
-        // Server-side tombstone: some device (any device) has confirmed this
-        // deleted. That's authoritative — drop it everywhere, permanently.
-        if(r && r.deleted) return;
-        if(pendingDeletes.has(id)){
-          if(r) stillPendingRemote.push(id);
-          return;
-        }
-        const l = localById[id];
-        if(l && r){
-          merged[id] = (new Date(l.updatedAt) > new Date(r.updatedAt)) ? l : r;
-          if(new Date(l.updatedAt) > new Date(r.updatedAt)) toPush.push(merged[id]);
-        } else if(l && !r){
-          merged[id] = l; toPush.push(l);
-        } else if(r && !l){
-          merged[id] = r;
-        }
-      });
-      state.activities = Object.values(merged).sort((a,b)=> a.date.localeCompare(b.date));
+      // Activities
+      const actResult = mergeByTombstone(state.activities, remoteActivities, r=>(
+        { id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at, deleted:!!r.deleted }
+      ), Store.pendingDeletes);
+      state.activities = actResult.merged;
       Store.activities = state.activities;
-
-      // Clear pending-delete ids once the tombstone is confirmed on the
-      // server, and retry the soft-delete for any that haven't landed yet.
-      Store.pendingDeletes = Store.pendingDeletes.filter(id=>remoteById[id] && !remoteById[id].deleted);
-      for(const id of stillPendingRemote){
-        const rec = remoteById[id];
+      Store.pendingDeletes = Store.pendingDeletes.filter(id=>actResult.remoteById[id] && !actResult.remoteById[id].deleted);
+      for(const id of actResult.stillPendingRemote){
+        const rec = actResult.remoteById[id];
         try{
           await SB.deleteActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'' });
           Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
         }catch(err){ console.error('retry delete failed', err); }
+      }
+
+      // Lessons
+      const lesResult = mergeByTombstone(state.lessons, remoteLessons, r=>(
+        { id:r.id, date:r.date, teachers:r.teachers||[], topic:r.topic||'', isSkip:!!r.is_skip, updatedAt:r.updated_at, deleted:!!r.deleted }
+      ), Store.pendingLessonDeletes);
+      state.lessons = lesResult.merged;
+      Store.lessons = state.lessons;
+      Store.pendingLessonDeletes = Store.pendingLessonDeletes.filter(id=>lesResult.remoteById[id] && !lesResult.remoteById[id].deleted);
+      for(const id of lesResult.stillPendingRemote){
+        const rec = lesResult.remoteById[id];
+        try{
+          await SB.deleteLesson({ id:rec.id, sync_code:code, date:rec.date, teachers:rec.teachers, topic:rec.topic||'', is_skip:rec.isSkip });
+          Store.pendingLessonDeletes = Store.pendingLessonDeletes.filter(pid=>pid!==id);
+        }catch(err){ console.error('retry lesson delete failed', err); }
       }
 
       // settings merge (last-write-wins, keep local if newer or remote absent)
@@ -809,8 +869,11 @@ const Sync = {
         await SB.upsertSettings({ sync_code:code, weekday:state.settings.weekday, class_name:state.settings.className, updated_at: nowIso() });
       }
 
-      for(const rec of toPush){
+      for(const rec of actResult.toPush){
         await SB.upsertActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt, deleted:false });
+      }
+      for(const rec of lesResult.toPush){
+        await SB.upsertLesson({ id:rec.id, sync_code:code, date:rec.date, teachers:rec.teachers, topic:rec.topic||'', is_skip:rec.isSkip, updated_at:rec.updatedAt, deleted:false });
       }
 
       this.setStatus('online','Synced');
@@ -834,6 +897,19 @@ const Sync = {
       await SB.deleteActivity({ id:record.id, sync_code:Store.syncCode, date:record.date, name:record.name, category:record.category, assignments:record.assignments, is_skip:record.isSkip, notes:record.notes||'' });
       Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==record.id);
     }catch(err){ console.error('delete sync failed', err); }
+  },
+  async pushOneLesson(lesson){
+    if(!keyReady()) return;
+    try{
+      await SB.upsertLesson({ id:lesson.id, sync_code:Store.syncCode, date:lesson.date, teachers:lesson.teachers, topic:lesson.topic||'', is_skip:lesson.isSkip, updated_at:lesson.updatedAt, deleted:false });
+    }catch(err){ console.error('push lesson failed', err); showToast('Saved locally — will sync when online'); }
+  },
+  async pushDeleteLesson(record){
+    if(!keyReady()) return;
+    try{
+      await SB.deleteLesson({ id:record.id, sync_code:Store.syncCode, date:record.date, teachers:record.teachers, topic:record.topic||'', is_skip:record.isSkip });
+      Store.pendingLessonDeletes = Store.pendingLessonDeletes.filter(pid=>pid!==record.id);
+    }catch(err){ console.error('delete lesson sync failed', err); }
   },
   async pushSettings(){
     if(!keyReady()) return;
@@ -894,6 +970,53 @@ const Data = {
   }
 };
 
+// ---------------- Lesson data ops ----------------
+const LessonData = {
+  save(lesson){
+    lesson.updatedAt = nowIso();
+    const idx = state.lessons.findIndex(l=>l.id===lesson.id);
+    if(idx>=0) state.lessons[idx]=lesson; else state.lessons.push(lesson);
+    state.lessons.sort((a,b)=>a.date.localeCompare(b.date));
+    Store.lessons = state.lessons;
+    Render.all();
+    Sync.pushOneLesson(lesson);
+  },
+  remove(id){
+    const rec = state.lessons.find(l=>l.id===id);
+    state.lessons = state.lessons.filter(l=>l.id!==id);
+    Store.lessons = state.lessons;
+    const pending = Store.pendingLessonDeletes;
+    if(!pending.includes(id)){ pending.push(id); Store.pendingLessonDeletes = pending; }
+    Render.all();
+    if(rec) Sync.pushDeleteLesson(rec);
+  },
+  markSkip(date){
+    const existing = state.lessons.find(l=>l.date===date);
+    const rec = existing || { id:uid(), date, teachers:[], topic:'' };
+    rec.isSkip = true;
+    this.save(rec);
+    showToast('Marked as no lesson');
+  },
+  unmarkSkip(id){ this.remove(id); },
+  buildCalendarRows(){
+    // Lessons are always Sunday (weekday 0), independent of the activity weekday.
+    const placeholderDates = generateWeekdayDates(0, 6);
+    const byDate = {};
+    state.lessons.forEach(l=>{ byDate[l.date]=l; });
+    const allDatesSet = new Set([...placeholderDates, ...state.lessons.map(l=>l.date)]);
+    const allDates = Array.from(allDatesSet).sort();
+    const today = todayISO();
+    const rows = [];
+    allDates.forEach(date=>{
+      if(date < today) return;
+      const rec = byDate[date];
+      if(rec) rows.push({ date, kind: rec.isSkip ? 'skip':'lesson', record: rec });
+      else if(placeholderDates.includes(date)) rows.push({ date, kind:'empty' });
+    });
+    return rows;
+  }
+};
+
 // ---------------- Render ----------------
 const Render = {
   all(){
@@ -901,6 +1024,7 @@ const Render = {
     this.calendar();
     this.planning();
     this.ideas();
+    this.lessons();
   },
   dateBits(iso){
     const d = parseISO(iso);
@@ -1032,6 +1156,56 @@ const Render = {
       }
     });
     list.innerHTML = html;
+  },
+  lessons(){
+    const rows = LessonData.buildCalendarRows();
+    const list = document.getElementById('lessonsList');
+    if(rows.length===0){
+      list.innerHTML = `<div class="empty-state">Nothing on the lesson schedule yet.</div>`;
+      return;
+    }
+    let html = '';
+    let lastMonth = '';
+    rows.forEach(row=>{
+      const b = this.dateBits(row.date);
+      const monthKey = b.month+' '+b.year;
+      if(monthKey !== lastMonth){
+        html += `<div class="month-heading">${monthKey}</div>`;
+        lastMonth = monthKey;
+      }
+      if(row.kind==='lesson'){
+        const rec = row.record;
+        const teachers = (rec.teachers||[]).filter(Boolean);
+        const teacherText = teachers.length ? teachers.join(', ') : 'No teacher assigned';
+        html += `
+          <div class="row activity" onclick="LessonForm.openEdit('${rec.id}')">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="cat-dot" style="background:var(--spiritual)"></div>
+            <div class="body">
+              <div class="title">${escapeHtml(teacherText)}</div>
+              <div class="sub">${rec.topic ? escapeHtml(rec.topic) : 'No topic set'}</div>
+            </div>
+          </div>`;
+      } else if(row.kind==='skip'){
+        html += `
+          <div class="row skip">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="body">No lesson</div>
+            <div class="row-actions"><button class="btn-mini" onclick="LessonData.unmarkSkip('${row.record.id}')">Undo</button></div>
+          </div>`;
+      } else {
+        html += `
+          <div class="row empty">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="body">No lesson planned</div>
+            <div class="row-actions">
+              <button class="btn-mini" onclick="LessonData.markSkip('${row.date}')">No lesson</button>
+              <button class="btn-mini primary" onclick="LessonForm.openNew('${row.date}')">+ Add</button>
+            </div>
+          </div>`;
+      }
+    });
+    list.innerHTML = html;
   }
 };
 
@@ -1051,9 +1225,11 @@ const Tabs = {
     document.getElementById('calendarTab').classList.toggle('hidden', tab!=='calendar');
     document.getElementById('planningTab').classList.toggle('hidden', tab!=='planning');
     document.getElementById('ideasTab').classList.toggle('hidden', tab!=='ideas');
+    document.getElementById('lessonsTab').classList.toggle('hidden', tab!=='lessons');
     document.getElementById('tabCalendarBtn').classList.toggle('active', tab==='calendar');
     document.getElementById('tabPlanningBtn').classList.toggle('active', tab==='planning');
     document.getElementById('tabIdeasBtn').classList.toggle('active', tab==='ideas');
+    document.getElementById('tabLessonsBtn').classList.toggle('active', tab==='lessons');
   }
 };
 
@@ -1178,6 +1354,94 @@ const ActivityForm = {
 };
 
 // ---------------- Calendar export (per-activity) ----------------
+const LessonForm = {
+  current:null,
+  openNew(prefillDate){
+    this.current = { id:uid(), date: prefillDate || this.nextSuggestedDate(), teachers:[''], topic:'', isNew:true };
+    this.render();
+  },
+  openEdit(id){
+    const rec = state.lessons.find(l=>l.id===id);
+    if(!rec) return;
+    this.current = JSON.parse(JSON.stringify(rec));
+    this.current.isNew = false;
+    if(!this.current.teachers || !this.current.teachers.length) this.current.teachers = [''];
+    this.render();
+  },
+  nextSuggestedDate(){
+    const dates = generateWeekdayDates(0, 1);
+    return dates[0] || todayISO();
+  },
+  addTeacher(){
+    this.readFormIntoCurrent();
+    this.current.teachers.push('');
+    this.render();
+  },
+  removeTeacher(idx){
+    this.readFormIntoCurrent();
+    this.current.teachers.splice(idx,1);
+    if(this.current.teachers.length===0) this.current.teachers.push('');
+    this.render();
+  },
+  close(){
+    const el = document.getElementById('lessonOverlay');
+    if(el) el.remove();
+  },
+  readFormIntoCurrent(){
+    const c = this.current;
+    c.date = document.getElementById('lesDate').value;
+    c.topic = document.getElementById('lesTopic').value.trim();
+    const rows = document.querySelectorAll('#lessonOverlay .teacher-name');
+    c.teachers = Array.from(rows).map(r=>r.value.trim());
+  },
+  save(){
+    this.readFormIntoCurrent();
+    const c = this.current;
+    if(!c.date){ showToast('Pick a date'); return; }
+    c.teachers = c.teachers.filter(t=>t);
+    if(c.teachers.length===0){ showToast('Add at least one teacher'); return; }
+    c.isSkip = false;
+    delete c.isNew;
+    LessonData.save(c);
+    this.close();
+  },
+  delete(){
+    if(!confirm('Delete this lesson?')) return;
+    LessonData.remove(this.current.id);
+    this.close();
+  },
+  render(){
+    this.close();
+    const c = this.current;
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.id = 'lessonOverlay';
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${c.isNew ? 'New lesson' : 'Edit lesson'}</h2>
+        <div class="field"><label>Date (Sunday)</label><input type="date" id="lesDate" value="${c.date}"></div>
+        <div class="field">
+          <label>Teacher${c.teachers.length>1?'s':''}</label>
+          <div id="teacherRows">
+            ${c.teachers.map((t,i)=>`
+              <div class="assign-row teacher-row">
+                <input type="text" class="teacher-name" placeholder="Name" value="${escapeHtml(t)}">
+                <button class="rm" onclick="LessonForm.removeTeacher(${i})">✕</button>
+              </div>`).join('')}
+          </div>
+          <button class="add-assign-btn" onclick="LessonForm.addTeacher()">+ Add teacher</button>
+        </div>
+        <div class="field"><label>Topic (optional)</label><input type="text" id="lesTopic" value="${escapeHtml(c.topic||'')}" placeholder="e.g. Faith, service, a specific talk"></div>
+        <div class="sheet-actions">
+          ${!c.isNew ? `<button class="btn danger-text" onclick="LessonForm.delete()">Delete</button>` : ''}
+          <button class="btn ghost" onclick="LessonForm.close()">Cancel</button>
+          <button class="btn primary" onclick="LessonForm.save()">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+};
+
 const CalendarExport = {
   activityId:null,
   open(activityId){
