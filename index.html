@@ -575,7 +575,7 @@
 // Bump this on every deploy — format 'YYYY-MM-DD.N'. The update-checker
 // below re-fetches this same file fresh and looks for this exact constant,
 // so keep the declaration on its own line, unchanged in shape.
-const APP_VERSION = '2026-08-02.1';
+const APP_VERSION = '2026-08-02.2';
 
 // ---- Supabase config: fill in your project's anon key below ----
 const SUPABASE_URL = 'https://yxxjfrpjducuqytoywwh.supabase.co';
@@ -775,6 +775,11 @@ const SB = {
       body:JSON.stringify([Object.assign({}, record, { deleted:true, updated_at: nowIso() })])
     });
     if(!res.ok) throw new Error('delete failed: '+res.status);
+  },
+  async fetchAllGroups(){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_settings?select=sync_code,class_name&order=class_name.asc`, { headers:this.headers() });
+    if(!res.ok) throw new Error('fetch groups failed: '+res.status);
+    return res.json();
   },
   async fetchSettings(code){
     const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_settings?sync_code=eq.${encodeURIComponent(code)}`, { headers:this.headers() });
@@ -1378,14 +1383,33 @@ const ActivityForm = {
     this.pickerMonth = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     this.render();
   },
+  shareDropdownHtml(){
+    const c = this.current;
+    if(!Groups.list){
+      Groups.load();
+      return `<div style="font-size:12px;color:var(--ink-faint);">Loading groups…</div>`;
+    }
+    const already = new Set([Store.syncCode, ...(c.sharedWith||[])]);
+    const options = Groups.list.filter(g=>!already.has(g.sync_code));
+    if(options.length===0){
+      return `<div style="font-size:12px;color:var(--ink-faint);">No other groups available to share with.</div>`;
+    }
+    return `<div class="assign-row">
+      <select id="shareGroupSelect" style="flex:1;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:14px;font-family:inherit;color:var(--ink);">
+        <option value="">Choose a group…</option>
+        ${options.map(g=>`<option value="${escapeHtml(g.sync_code)}">${g.class_name && g.class_name.trim() ? escapeHtml(g.class_name) : 'Unnamed group ('+escapeHtml(g.sync_code)+')'}</option>`).join('')}
+      </select>
+      <button class="btn-mini" style="flex:0 0 auto;" onclick="ActivityForm.addShareCode()">Share</button>
+    </div>`;
+  },
   addShareCode(){
     this.readFormIntoCurrent();
-    const input = document.getElementById('shareCodeInput');
-    const code = (input ? input.value : '').trim().toUpperCase();
-    if(!code){ showToast('Enter a sync code'); return; }
+    const sel = document.getElementById('shareGroupSelect');
+    const code = (sel ? sel.value : '').trim();
+    if(!code){ showToast('Choose a group to share with'); return; }
     if(code === Store.syncCode){ showToast('That is this group\'s own code'); return; }
     if(!this.current.sharedWith) this.current.sharedWith = [];
-    if(this.current.sharedWith.includes(code)){ showToast('Already shared with '+code); return; }
+    if(this.current.sharedWith.includes(code)){ showToast('Already shared with that group'); return; }
     this.current.sharedWith.push(code);
     this.render();
   },
@@ -1509,8 +1533,8 @@ const ActivityForm = {
         <div class="field"><label>Notes (optional)</label><textarea id="actNotes" placeholder="Details, location, what to bring…">${escapeHtml(c.notes||'')}</textarea></div>
         ${!c.isNew ? `<div class="field">
           <label>Shared with other groups</label>
-          ${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).length ? `<div class="chip-row">${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).map(code=>`<div class="chip share-chip">${escapeHtml(code)} <span class="chip-x" onclick="ActivityForm.removeShareCode('${code}')">✕</span></div>`).join('')}</div>` : `<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;">Not shared. Enter another group's sync code to plan this together.</div>`}
-          <div class="assign-row"><input type="text" id="shareCodeInput" placeholder="Group sync code" style="text-transform:uppercase;"><button class="btn-mini" style="flex:0 0 auto;" onclick="ActivityForm.addShareCode()">Share</button></div>
+          ${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).length ? `<div class="chip-row">${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).map(code=>`<div class="chip share-chip">${escapeHtml((Groups.list||[]).find(g=>g.sync_code===code && g.class_name && g.class_name.trim()) ? Groups.list.find(g=>g.sync_code===code).class_name : code)} <span class="chip-x" onclick="ActivityForm.removeShareCode('${code}')">✕</span></div>`).join('')}</div>` : `<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;">Not shared. Enter another group's sync code to plan this together.</div>`}
+          ${this.shareDropdownHtml()}
         </div>` : ''}
         ${!c.isNew ? `<button class="btn ghost" style="width:100%;margin-bottom:14px;" onclick="CalendarExport.open('${c.id}')">Add to Calendar</button>` : ''}
         <div class="sheet-actions">
@@ -1527,6 +1551,29 @@ const ActivityForm = {
 };
 
 // ---------------- Calendar export (per-activity) ----------------
+// Cache of all groups in the database, for the share dropdown.
+const Groups = {
+  list: null,
+  loadedAt: 0,
+  loading: false,
+  async load(){
+    if(this.loading) return;
+    if(this.list && Date.now() - this.loadedAt < 5*60*1000) return; // fresh enough
+    if(!keyReady()) return;
+    this.loading = true;
+    try{
+      this.list = await SB.fetchAllGroups();
+      this.loadedAt = Date.now();
+      // If the activity form is open, refresh it so the dropdown fills in
+      if(document.getElementById('activityOverlay') && ActivityForm.current){
+        ActivityForm.readFormIntoCurrent();
+        ActivityForm.render();
+      }
+    }catch(err){ console.error('groups load failed', err); }
+    finally{ this.loading = false; }
+  }
+};
+
 const LessonForm = {
   current:null,
   openNew(prefillDate){
@@ -1878,6 +1925,7 @@ function boot(afterSetup){
   state.settings = Store.settings;
   Render.all();
   Sync.full();
+  Groups.load();
   if(afterSetup) showToast('Welcome!');
 }
 
