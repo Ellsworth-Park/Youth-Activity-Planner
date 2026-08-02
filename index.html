@@ -388,6 +388,7 @@
   .dp-key-open{background:#DCE9F5;border:1px solid #A9C6E0;}
   .dp-key-taken{background:var(--bg);border:1px solid var(--line);}
   .dp-key-sel{background:var(--ink);}
+  .share-row{display:flex;gap:8px;}
   .share-chip{display:flex;align-items:center;gap:6px;}
   .chip-x{cursor:pointer;color:var(--danger);font-weight:700;}
 
@@ -575,7 +576,7 @@
 // Bump this on every deploy — format 'YYYY-MM-DD.N'. The update-checker
 // below re-fetches this same file fresh and looks for this exact constant,
 // so keep the declaration on its own line, unchanged in shape.
-const APP_VERSION = '2026-08-02.2';
+const APP_VERSION = '2026-08-02.3';
 
 // ---- Supabase config: fill in your project's anon key below ----
 const SUPABASE_URL = 'https://yxxjfrpjducuqytoywwh.supabase.co';
@@ -1394,7 +1395,7 @@ const ActivityForm = {
     if(options.length===0){
       return `<div style="font-size:12px;color:var(--ink-faint);">No other groups available to share with.</div>`;
     }
-    return `<div class="assign-row">
+    return `<div class="share-row">
       <select id="shareGroupSelect" style="flex:1;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:14px;font-family:inherit;color:var(--ink);">
         <option value="">Choose a group…</option>
         ${options.map(g=>`<option value="${escapeHtml(g.sync_code)}">${g.class_name && g.class_name.trim() ? escapeHtml(g.class_name) : 'Unnamed group ('+escapeHtml(g.sync_code)+')'}</option>`).join('')}
@@ -1412,6 +1413,7 @@ const ActivityForm = {
     if(this.current.sharedWith.includes(code)){ showToast('Already shared with that group'); return; }
     this.current.sharedWith.push(code);
     this.render();
+    showToast('Added — tap Save to share');
   },
   removeShareCode(code){
     this.readFormIntoCurrent();
@@ -1427,10 +1429,11 @@ const ActivityForm = {
     c.name = document.getElementById('actName').value.trim();
     c.notes = document.getElementById('actNotes').value.trim();
     const rows = document.querySelectorAll('#activityOverlay .assign-row');
-    c.assignments = Array.from(rows).map(r=>({
-      type: r.querySelector('.assign-type').value.trim(),
-      assignee: r.querySelector('.assign-name').value.trim()
-    })).filter(a=>a.type || a.assignee);
+    c.assignments = Array.from(rows).map(r=>{
+      const t = r.querySelector('.assign-type'), n = r.querySelector('.assign-name');
+      if(!t || !n) return null; // not an assignment row — never crash on it
+      return { type: t.value.trim(), assignee: n.value.trim() };
+    }).filter(a=>a && (a.type || a.assignee));
   },
   save(){
     this.readFormIntoCurrent();
