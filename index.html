@@ -367,6 +367,27 @@
     justify-content:center;cursor:pointer;margin-top:2px;
   }
 
+  /* Custom date picker */
+  .dp{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px;}
+  .dp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .dp-title{font-weight:600;font-size:14px;}
+  .dp-nav{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--bg);font-size:17px;cursor:pointer;color:var(--ink);}
+  .dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+  .dp-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;border-radius:9px;}
+  .dp-dow{color:var(--ink-faint);font-size:10px;font-weight:600;aspect-ratio:auto;padding:2px 0;}
+  .dp-day{cursor:pointer;color:var(--ink);}
+  .dp-day:active{transform:scale(0.93);}
+  .dp-open{background:#DCE9F5;color:#2A5B87;font-weight:600;}
+  .dp-taken{color:var(--ink-faint);background:var(--bg);cursor:not-allowed;text-decoration:line-through;}
+  .dp-selected{background:var(--ink) !important;color:#fff !important;font-weight:700;}
+  .dp-legend{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-soft);margin-top:7px;flex-wrap:wrap;}
+  .dp-key{width:11px;height:11px;border-radius:4px;display:inline-block;}
+  .dp-key-open{background:#DCE9F5;border:1px solid #A9C6E0;}
+  .dp-key-taken{background:var(--bg);border:1px solid var(--line);}
+  .dp-key-sel{background:var(--ink);}
+  .share-chip{display:flex;align-items:center;gap:6px;}
+  .chip-x{cursor:pointer;color:var(--danger);font-weight:700;}
+
   .sheet-actions{display:flex;gap:10px;margin-top:20px;}
   .btn{
     flex:1;
@@ -685,6 +706,11 @@ const Store = {
     return raw ? JSON.parse(raw) : [];
   },
   set pendingDeletes(v){ localStorage.setItem('yc_pending_deletes_'+this.syncCode, JSON.stringify(v)); },
+  get pendingLeaves(){
+    const raw = localStorage.getItem('yc_pending_leaves_'+this.syncCode);
+    return raw ? JSON.parse(raw) : [];
+  },
+  set pendingLeaves(v){ localStorage.setItem('yc_pending_leaves_'+this.syncCode, JSON.stringify(v)); },
   get lessons(){
     const raw = localStorage.getItem('yc_lessons_'+this.syncCode);
     return raw ? JSON.parse(raw) : [];
@@ -705,7 +731,9 @@ const SB = {
   async fetchActivities(code){
     // Deliberately not filtering out deleted:true rows here — every device
     // needs to see the tombstone so it knows to drop its own local copy too.
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?sync_code=eq.${encodeURIComponent(code)}&order=date.asc`, { headers:this.headers() });
+    // Matches rows this group owns OR rows another group shared with it.
+    const orFilter = `or=(sync_code.eq.${encodeURIComponent(code)},shared_with.cs.${encodeURIComponent('["'+code+'"]')})`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/youth_calendar_activities?${orFilter}&order=date.asc`, { headers:this.headers() });
     if(!res.ok) throw new Error('fetch activities failed: '+res.status);
     return res.json();
   },
@@ -826,18 +854,30 @@ const Sync = {
       ]);
 
       // Activities
+      const actPending = new Set([...Store.pendingDeletes, ...Store.pendingLeaves]);
       const actResult = mergeByTombstone(state.activities, remoteActivities, r=>(
-        { id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at, deleted:!!r.deleted }
-      ), Store.pendingDeletes);
+        { id:r.id, date:r.date, name:r.name, category:r.category, assignments:r.assignments||[], isSkip:!!r.is_skip, notes:r.notes||'', updatedAt:r.updated_at, deleted:!!r.deleted, ownerCode:r.sync_code, sharedWith:r.shared_with||[] }
+      ), actPending);
       state.activities = actResult.merged;
       Store.activities = state.activities;
       Store.pendingDeletes = Store.pendingDeletes.filter(id=>actResult.remoteById[id] && !actResult.remoteById[id].deleted);
+      // A left activity's tombstone-of-sorts is simply "the server no longer
+      // returns it for us" (shared_with no longer contains our code) — once
+      // this fetch confirms that, forget about it for good.
+      Store.pendingLeaves = Store.pendingLeaves.filter(id=>!!actResult.remoteById[id]);
       for(const id of actResult.stillPendingRemote){
         const rec = actResult.remoteById[id];
-        try{
-          await SB.deleteActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'' });
-          Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
-        }catch(err){ console.error('retry delete failed', err); }
+        if(Store.pendingDeletes.includes(id)){
+          try{
+            await SB.deleteActivity({ id:rec.id, sync_code:rec.ownerCode||code, shared_with:rec.sharedWith||[], date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'' });
+            Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==id);
+          }catch(err){ console.error('retry delete failed', err); }
+        } else if(Store.pendingLeaves.includes(id)){
+          try{
+            const newShared = (rec.sharedWith||[]).filter(c=>c!==code);
+            await SB.upsertActivity({ id:rec.id, sync_code:rec.ownerCode||code, shared_with:newShared, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:nowIso(), deleted:false });
+          }catch(err){ console.error('retry leave failed', err); }
+        }
       }
 
       // Lessons
@@ -878,7 +918,7 @@ const Sync = {
       }
 
       for(const rec of actResult.toPush){
-        await SB.upsertActivity({ id:rec.id, sync_code:code, date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt, deleted:false });
+        await SB.upsertActivity({ id:rec.id, sync_code:rec.ownerCode||code, shared_with:rec.sharedWith||[], date:rec.date, name:rec.name, category:rec.category, assignments:rec.assignments, is_skip:rec.isSkip, notes:rec.notes||'', updated_at:rec.updatedAt, deleted:false });
       }
       for(const rec of lesResult.toPush){
         await SB.upsertLesson({ id:rec.id, sync_code:code, date:rec.date, teachers:rec.teachers, topic:rec.topic||'', is_skip:rec.isSkip, updated_at:rec.updatedAt, deleted:false });
@@ -896,15 +936,25 @@ const Sync = {
   async pushOne(activity){
     if(!keyReady()) return;
     try{
-      await SB.upsertActivity({ id:activity.id, sync_code:Store.syncCode, date:activity.date, name:activity.name, category:activity.category, assignments:activity.assignments, is_skip:activity.isSkip, notes:activity.notes||'', updated_at:activity.updatedAt, deleted:false });
+      await SB.upsertActivity({ id:activity.id, sync_code:activity.ownerCode||Store.syncCode, shared_with:activity.sharedWith||[], date:activity.date, name:activity.name, category:activity.category, assignments:activity.assignments, is_skip:activity.isSkip, notes:activity.notes||'', updated_at:activity.updatedAt, deleted:false });
     }catch(err){ console.error('push failed', err); showToast('Saved locally — will sync when online'); }
   },
   async pushDelete(record){
     if(!keyReady()) return;
     try{
-      await SB.deleteActivity({ id:record.id, sync_code:Store.syncCode, date:record.date, name:record.name, category:record.category, assignments:record.assignments, is_skip:record.isSkip, notes:record.notes||'' });
+      await SB.deleteActivity({ id:record.id, sync_code:record.ownerCode||Store.syncCode, shared_with:record.sharedWith||[], date:record.date, name:record.name, category:record.category, assignments:record.assignments, is_skip:record.isSkip, notes:record.notes||'' });
       Store.pendingDeletes = Store.pendingDeletes.filter(pid=>pid!==record.id);
     }catch(err){ console.error('delete sync failed', err); }
+  },
+  async pushLeave(record){
+    if(!keyReady()) return;
+    try{
+      const newShared = (record.sharedWith||[]).filter(c=>c!==Store.syncCode);
+      await SB.upsertActivity({ id:record.id, sync_code:record.ownerCode||Store.syncCode, shared_with:newShared, date:record.date, name:record.name, category:record.category, assignments:record.assignments, is_skip:record.isSkip, notes:record.notes||'', updated_at: nowIso(), deleted:false });
+      // Cleared from pendingLeaves once a later fetch confirms we're no longer
+      // in shared_with (handled in Sync.full) — this device's own filtered
+      // fetch will simply stop returning the row at that point.
+    }catch(err){ console.error('leave sync failed', err); }
   },
   async pushOneLesson(lesson){
     if(!keyReady()) return;
@@ -930,6 +980,8 @@ const Sync = {
 const Data = {
   save(activity){
     activity.updatedAt = nowIso();
+    if(!activity.ownerCode) activity.ownerCode = Store.syncCode;
+    if(!activity.sharedWith) activity.sharedWith = [];
     const idx = state.activities.findIndex(a=>a.id===activity.id);
     if(idx>=0) state.activities[idx]=activity; else state.activities.push(activity);
     state.activities.sort((a,b)=>a.date.localeCompare(b.date));
@@ -945,6 +997,15 @@ const Data = {
     if(!pending.includes(id)){ pending.push(id); Store.pendingDeletes = pending; }
     Render.all();
     if(rec) Sync.pushDelete(rec);
+  },
+  leave(id){
+    const rec = state.activities.find(a=>a.id===id);
+    state.activities = state.activities.filter(a=>a.id!==id);
+    Store.activities = state.activities;
+    const pending = Store.pendingLeaves;
+    if(!pending.includes(id)){ pending.push(id); Store.pendingLeaves = pending; }
+    Render.all();
+    if(rec) Sync.pushLeave(rec);
   },
   markSkip(date){
     const existing = state.activities.find(a=>a.date===date);
@@ -1088,7 +1149,7 @@ const Render = {
             <div class="cat-dot" style="background:${cat.color}"></div>
             <div class="body">
               <div class="title">${escapeHtml(rec.name)}</div>
-              <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}</div>
+              <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}${(rec.sharedWith&&rec.sharedWith.length)||(rec.ownerCode&&rec.ownerCode!==Store.syncCode) ? ' · ⇄ shared' : ''}</div>
             </div>
           </div>`;
       } else if(row.kind==='skip'){
@@ -1130,7 +1191,7 @@ const Render = {
           <div class="cat-dot" style="background:${cat.color}"></div>
           <div class="body">
             <div class="title">${escapeHtml(rec.name)}</div>
-            <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}</div>
+            <div class="sub">${cat.label}${assignCount ? ' · '+assignCount+' assignment'+(assignCount>1?'s':'') : ''}${(rec.sharedWith&&rec.sharedWith.length)||(rec.ownerCode&&rec.ownerCode!==Store.syncCode) ? ' · ⇄ shared' : ''}</div>
           </div>
         </div>`;
     });
@@ -1247,13 +1308,15 @@ const Tabs = {
 const ActivityForm = {
   current:null,
   openNew(prefillDate){
-    this.current = { id:uid(), date: prefillDate || this.nextSuggestedDate(), name:'', category:'', assignments:[], notes:'', isNew:true };
+    this.current = { id:uid(), date: prefillDate || this.nextSuggestedDate(), name:'', category:'', assignments:[], notes:'', sharedWith:[], isNew:true };
+    this.pickerMonth = this.current.date.slice(0,7);
     this.render();
   },
   openFromIdea(index){
     const idea = IDEAS[index];
     if(!idea) return;
-    this.current = { id:uid(), date:this.nextSuggestedDate(), name:idea.title, category:idea.category, assignments:[], notes:'', isNew:true };
+    this.current = { id:uid(), date:this.nextSuggestedDate(), name:idea.title, category:idea.category, assignments:[], notes:'', sharedWith:[], isNew:true };
+    this.pickerMonth = this.current.date.slice(0,7);
     this.render();
   },
   openEdit(id){
@@ -1261,6 +1324,8 @@ const ActivityForm = {
     if(!rec) return;
     this.current = JSON.parse(JSON.stringify(rec));
     this.current.isNew = false;
+    if(!this.current.sharedWith) this.current.sharedWith = [];
+    this.pickerMonth = this.current.date.slice(0,7);
     this.render();
   },
   nextSuggestedDate(){
@@ -1282,6 +1347,34 @@ const ActivityForm = {
     this.current.category = cat;
     this.render();
   },
+  setDate(iso){
+    this.readFormIntoCurrent();
+    this.current.date = iso;
+    this.render();
+  },
+  navMonth(delta){
+    this.readFormIntoCurrent();
+    const [y,m] = (this.pickerMonth || this.current.date.slice(0,7)).split('-').map(Number);
+    const d = new Date(y, m-1+delta, 1);
+    this.pickerMonth = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    this.render();
+  },
+  addShareCode(){
+    this.readFormIntoCurrent();
+    const input = document.getElementById('shareCodeInput');
+    const code = (input ? input.value : '').trim().toUpperCase();
+    if(!code){ showToast('Enter a sync code'); return; }
+    if(code === Store.syncCode){ showToast('That is this group\'s own code'); return; }
+    if(!this.current.sharedWith) this.current.sharedWith = [];
+    if(this.current.sharedWith.includes(code)){ showToast('Already shared with '+code); return; }
+    this.current.sharedWith.push(code);
+    this.render();
+  },
+  removeShareCode(code){
+    this.readFormIntoCurrent();
+    this.current.sharedWith = (this.current.sharedWith||[]).filter(c=>c!==code);
+    this.render();
+  },
   close(){
     const el = document.getElementById('activityOverlay');
     if(el) el.remove();
@@ -1289,7 +1382,6 @@ const ActivityForm = {
   readFormIntoCurrent(){
     const c = this.current;
     c.name = document.getElementById('actName').value.trim();
-    c.date = document.getElementById('actDate').value;
     c.notes = document.getElementById('actNotes').value.trim();
     const rows = document.querySelectorAll('#activityOverlay .assign-row');
     c.assignments = Array.from(rows).map(r=>({
@@ -1309,9 +1401,53 @@ const ActivityForm = {
     this.close();
   },
   delete(){
-    if(!confirm('Delete this activity?')) return;
+    if(!confirm('Delete this activity? This removes it for every group it\'s shared with, not just yours.')) return;
     Data.remove(this.current.id);
     this.close();
+  },
+  leave(){
+    if(!confirm('Leave this activity? It stays on the other group\'s calendar \u2014 it just won\'t show on yours anymore.')) return;
+    Data.leave(this.current.id);
+    this.close();
+  },
+  datePickerHtml(){
+    const c = this.current;
+    const ym = this.pickerMonth || c.date.slice(0,7);
+    const [y,m] = ym.split('-').map(Number);
+    const first = new Date(y, m-1, 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const startDow = first.getDay();
+    const today = todayISO();
+    const groupWeekday = state.settings.weekday ?? 3;
+    // Dates blocked: some OTHER real activity already scheduled there
+    const taken = new Set(state.activities.filter(a=>!a.isSkip && a.id!==c.id).map(a=>a.date));
+    let cells = '';
+    for(let i=0;i<startDow;i++) cells += '<div class="dp-cell dp-blank"></div>';
+    for(let day=1; day<=daysInMonth; day++){
+      const iso = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const dow = new Date(y, m-1, day).getDay();
+      const isTaken = taken.has(iso);
+      const isSelected = iso === c.date;
+      const isOpen = !isTaken && dow === groupWeekday && iso >= today;
+      let cls = 'dp-cell dp-day';
+      if(isTaken) cls += ' dp-taken';
+      if(isOpen) cls += ' dp-open';
+      if(isSelected) cls += ' dp-selected';
+      cells += `<div class="${cls}" ${isTaken ? '' : `onclick="ActivityForm.setDate('${iso}')"`}>${day}</div>`;
+    }
+    return `
+      <div class="dp">
+        <div class="dp-head">
+          <button type="button" class="dp-nav" onclick="ActivityForm.navMonth(-1)">‹</button>
+          <div class="dp-title">${MONTH_NAMES[m-1]} ${y}</div>
+          <button type="button" class="dp-nav" onclick="ActivityForm.navMonth(1)">›</button>
+        </div>
+        <div class="dp-grid">
+          ${DOW_NAMES.map(n=>`<div class="dp-cell dp-dow">${n[0]}</div>`).join('')}
+          ${cells}
+        </div>
+        <div class="dp-legend"><span class="dp-key dp-key-open"></span> Open ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][groupWeekday]}s &nbsp; <span class="dp-key dp-key-taken"></span> Already scheduled &nbsp; <span class="dp-key dp-key-sel"></span> Selected</div>
+      </div>`;
   },
   render(){
     this.close();
@@ -1323,7 +1459,7 @@ const ActivityForm = {
       <div class="sheet">
         <h2>${c.isNew ? 'New activity' : 'Edit activity'}</h2>
         <div class="field"><label>Name</label><input type="text" id="actName" value="${escapeHtml(c.name)}" placeholder="e.g. Service project, Game night"></div>
-        <div class="field"><label>Date</label><input type="date" id="actDate" value="${c.date}"></div>
+        <div class="field"><label>Date</label>${this.datePickerHtml()}</div>
         <div class="field">
           <label>Category</label>
           <div class="compass">
@@ -1352,9 +1488,17 @@ const ActivityForm = {
           <button class="add-assign-btn" onclick="ActivityForm.addAssignment('')">+ Add assignment</button>
         </div>
         <div class="field"><label>Notes (optional)</label><textarea id="actNotes" placeholder="Details, location, what to bring…">${escapeHtml(c.notes||'')}</textarea></div>
+        ${!c.isNew ? `<div class="field">
+          <label>Shared with other groups</label>
+          ${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).length ? `<div class="chip-row">${(c.sharedWith||[]).filter(code=>code!==Store.syncCode).map(code=>`<div class="chip share-chip">${escapeHtml(code)} <span class="chip-x" onclick="ActivityForm.removeShareCode('${code}')">✕</span></div>`).join('')}</div>` : `<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;">Not shared. Enter another group's sync code to plan this together.</div>`}
+          <div class="assign-row"><input type="text" id="shareCodeInput" placeholder="Group sync code" style="text-transform:uppercase;"><button class="btn-mini" style="flex:0 0 auto;" onclick="ActivityForm.addShareCode()">Share</button></div>
+        </div>` : ''}
         ${!c.isNew ? `<button class="btn ghost" style="width:100%;margin-bottom:14px;" onclick="CalendarExport.open('${c.id}')">Add to Calendar</button>` : ''}
         <div class="sheet-actions">
-          ${!c.isNew ? `<button class="btn danger-text" onclick="ActivityForm.delete()">Delete</button>` : ''}
+          ${!c.isNew ? (c.ownerCode && c.ownerCode !== Store.syncCode
+              ? `<button class="btn danger-text" onclick="ActivityForm.leave()">Leave</button>`
+              : `<button class="btn danger-text" onclick="ActivityForm.delete()">Delete</button>`
+            ) : ''}
           <button class="btn ghost" onclick="ActivityForm.close()">Cancel</button>
           <button class="btn primary" onclick="ActivityForm.save()">Save</button>
         </div>
