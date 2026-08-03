@@ -541,6 +541,15 @@
       <div id="lessonsTab" class="hidden">
         <div id="lessonsList"></div>
       </div>
+      <!-- Other groups (read-only) tab -->
+      <div id="groupsTab" class="hidden">
+        <div class="field" style="margin-top:6px;">
+          <label>View another group's calendar</label>
+          <select id="groupViewSelect" onchange="OtherGroups.select(this.value)" style="width:100%;padding:12px 13px;border-radius:11px;border:1px solid var(--line);background:var(--surface);font-size:15px;font-family:inherit;color:var(--ink);"></select>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin:-6px 4px 12px;">Read-only — to plan together, share an activity with them instead.</div>
+        <div id="groupViewList"></div>
+      </div>
     </main>
 
     <nav class="tabbar">
@@ -560,6 +569,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
         Lessons
       </button>
+      <button id="tabGroupsBtn" onclick="Tabs.show('groups')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Groups
+      </button>
     </nav>
   </div>
 
@@ -576,7 +589,7 @@
 // Bump this on every deploy — format 'YYYY-MM-DD.N'. The update-checker
 // below re-fetches this same file fresh and looks for this exact constant,
 // so keep the declaration on its own line, unchanged in shape.
-const APP_VERSION = '2026-08-02.3';
+const APP_VERSION = '2026-08-02.4';
 
 // ---- Supabase config: fill in your project's anon key below ----
 const SUPABASE_URL = 'https://yxxjfrpjducuqytoywwh.supabase.co';
@@ -1322,10 +1335,13 @@ const Tabs = {
     document.getElementById('planningTab').classList.toggle('hidden', tab!=='planning');
     document.getElementById('ideasTab').classList.toggle('hidden', tab!=='ideas');
     document.getElementById('lessonsTab').classList.toggle('hidden', tab!=='lessons');
+    document.getElementById('groupsTab').classList.toggle('hidden', tab!=='groups');
     document.getElementById('tabCalendarBtn').classList.toggle('active', tab==='calendar');
     document.getElementById('tabPlanningBtn').classList.toggle('active', tab==='planning');
     document.getElementById('tabIdeasBtn').classList.toggle('active', tab==='ideas');
     document.getElementById('tabLessonsBtn').classList.toggle('active', tab==='lessons');
+    document.getElementById('tabGroupsBtn').classList.toggle('active', tab==='groups');
+    if(tab==='groups') OtherGroups.init();
   }
 };
 
@@ -1572,8 +1588,103 @@ const Groups = {
         ActivityForm.readFormIntoCurrent();
         ActivityForm.render();
       }
+      // Same for the Groups tab's viewer dropdown
+      if(state.activeTab==='groups') OtherGroups.renderDropdown();
     }catch(err){ console.error('groups load failed', err); }
     finally{ this.loading = false; }
+  }
+};
+
+// Read-only viewer for other groups' calendars (activities + lessons)
+const OtherGroups = {
+  selected: '',
+  cache: {},   // code -> { at, activities, lessons }
+  async init(){
+    await Groups.load();
+    this.renderDropdown();
+    if(this.selected) this.view(this.selected);
+  },
+  renderDropdown(){
+    const sel = document.getElementById('groupViewSelect');
+    if(!sel) return;
+    const others = (Groups.list||[]).filter(g=>g.sync_code!==Store.syncCode);
+    sel.innerHTML = `<option value="">Choose a group…</option>` +
+      others.map(g=>`<option value="${escapeHtml(g.sync_code)}" ${g.sync_code===this.selected?'selected':''}>${g.class_name && g.class_name.trim() ? escapeHtml(g.class_name) : 'Unnamed group ('+escapeHtml(g.sync_code)+')'}</option>`).join('');
+    if(others.length===0){
+      document.getElementById('groupViewList').innerHTML = `<div class="empty-state">No other groups found yet.</div>`;
+    }
+  },
+  select(code){
+    this.selected = code;
+    if(!code){ document.getElementById('groupViewList').innerHTML=''; return; }
+    this.view(code);
+  },
+  async view(code){
+    const listEl = document.getElementById('groupViewList');
+    const cached = this.cache[code];
+    if(cached && Date.now()-cached.at < 60*1000){
+      this.renderList(cached.activities, cached.lessons);
+      return;
+    }
+    listEl.innerHTML = `<div class="empty-state">Loading…</div>`;
+    try{
+      const [acts, lessons] = await Promise.all([ SB.fetchActivities(code), SB.fetchLessons(code) ]);
+      const activities = acts.filter(a=>!a.deleted && !a.is_skip);
+      const les = lessons.filter(l=>!l.deleted && !l.is_skip);
+      this.cache[code] = { at: Date.now(), activities, lessons: les };
+      if(this.selected === code) this.renderList(activities, les);
+    }catch(err){
+      console.error(err);
+      if(this.selected === code) listEl.innerHTML = `<div class="empty-state">Couldn't load that group's calendar. Check your connection and try again.</div>`;
+    }
+  },
+  renderList(activities, lessons){
+    const listEl = document.getElementById('groupViewList');
+    const today = todayISO();
+    const items = [
+      ...activities.filter(a=>a.date>=today).map(a=>({ date:a.date, type:'activity', rec:a })),
+      ...lessons.filter(l=>l.date>=today).map(l=>({ date:l.date, type:'lesson', rec:l }))
+    ].sort((x,y)=>x.date.localeCompare(y.date));
+    if(items.length===0){
+      listEl.innerHTML = `<div class="empty-state">Nothing upcoming on this group's calendar.</div>`;
+      return;
+    }
+    let html = '';
+    let lastMonth = '';
+    items.forEach(item=>{
+      const b = Render.dateBits(item.date);
+      const monthKey = b.month+' '+b.year;
+      if(monthKey !== lastMonth){
+        html += `<div class="month-heading">${monthKey}</div>`;
+        lastMonth = monthKey;
+      }
+      if(item.type==='activity'){
+        const a = item.rec;
+        const cat = CATEGORIES[a.category] || {color:'var(--ink-faint)',label:''};
+        html += `
+          <div class="row">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="cat-dot" style="background:${cat.color}"></div>
+            <div class="body">
+              <div class="title">${escapeHtml(a.name)}</div>
+              <div class="sub">Activity · ${cat.label}</div>
+            </div>
+          </div>`;
+      } else {
+        const l = item.rec;
+        const teachers = (l.teachers||[]).filter(Boolean);
+        html += `
+          <div class="row">
+            <div class="date-chip"><div class="dow">${b.dow}</div><div class="dom">${b.dom}</div></div>
+            <div class="cat-dot" style="background:var(--spiritual)"></div>
+            <div class="body">
+              <div class="title">${teachers.length ? escapeHtml(teachers.join(', ')) : 'No teacher assigned'}</div>
+              <div class="sub">Lesson${l.topic ? ' · '+escapeHtml(l.topic) : ''}</div>
+            </div>
+          </div>`;
+      }
+    });
+    listEl.innerHTML = html;
   }
 };
 
